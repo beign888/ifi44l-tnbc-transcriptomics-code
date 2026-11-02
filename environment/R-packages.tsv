@@ -1,0 +1,14 @@
+package	version	source
+R	4.3.2	CRAN runtime
+data.table	1.17.0	CRAN
+ggplot2	3.5.1	CRAN
+survival	3.8-3	CRAN
+survminer	0.5.0	CRAN
+limma	3.58.1	Bioconductor 3.18
+GSVA	1.50.5	Bioconductor 3.18
+clusterProfiler	4.10.1	Bioconductor 3.18
+org.Hs.eg.db	3.18.0	Bioconductor 3.18
+GEOquery	2.70.0	Bioconductor 3.18
+Biobase	2.62.0	Bioconductor 3.18
+AnnotationDbi	1.64.1	Bioconductor 3.18
+hgu133plus2.db	3.13.0	Bioconductor annotation package
