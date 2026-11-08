@@ -22,12 +22,9 @@ argument_value <- function(flag, default = NULL) {
 project_dir <- normalizePath(argument_value("--project", "."), mustWork = TRUE)
 raw_root <- normalizePath(
   argument_value("--raw-root", dirname(project_dir)),
-  mustWork = TRUE
+  mustWork = FALSE
 )
-input_dir <- normalizePath(
-  file.path(raw_root, "数据", "差异富集分析", "3 差异分析"),
-  mustWork = TRUE
-)
+input_dir <- file.path(raw_root, "数据", "差异富集分析", "3 差异分析")
 result_dir <- file.path(project_dir, "results", "bulk")
 figure_dir <- file.path(project_dir, "figures", "bulk")
 log_dir <- file.path(project_dir, "logs")
@@ -35,16 +32,27 @@ dir.create(result_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(figure_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
-matrix_file <- file.path(input_dir, "symbol.BRCA.txt")
-tnbc_file <- file.path(input_dir, "三阴.txt")
+matrix_file <- argument_value("--expression-matrix", NULL)
+if (is.null(matrix_file)) {
+  archived_matrix <- file.path(input_dir, "symbol.BRCA.txt")
+  frozen_matrix <- file.path(project_dir, "source_metadata", "TCGA_frozen", "TCGA_BRCA_TNBC_frozen.tsv.gz")
+  matrix_file <- if (file.exists(archived_matrix)) archived_matrix else frozen_matrix
+}
+if (!file.exists(matrix_file)) stop("Missing expression matrix; restore the frozen public TCGA subset or specify --expression-matrix")
+manifest_file <- file.path(result_dir, "TCGA_TNBC_sample_definition_manifest.tsv")
+if (!file.exists(manifest_file)) stop("Run 21_audit_tcga_tnbc_definition.py first to generate the clinically verified TNBC manifest")
+manifest <- fread(manifest_file)
+if (!all(c("sample_id", "included_in_analysis") %in% names(manifest))) stop("TNBC definition-manifest schema mismatch")
+is_included <- tolower(as.character(manifest$included_in_analysis)) %in% c("true", "1")
+tnbc_requested <- unique(as.character(manifest$sample_id[is_included]))
+if (!length(tnbc_requested) || anyDuplicated(tnbc_requested)) stop("Empty or duplicated TNBC inclusion list")
 
 message("[1/8] Reading header and matching the TNBC sample list")
 header <- names(fread(matrix_file, nrows = 0, check.names = FALSE))
 all_samples <- header[-1]
-tnbc_requested <- unique(trimws(readLines(tnbc_file, warn = FALSE)))
-tnbc_requested <- tnbc_requested[nzchar(tnbc_requested)]
 tnbc_samples <- tnbc_requested[tnbc_requested %in% all_samples]
 tnbc_missing <- setdiff(tnbc_requested, all_samples)
+if (length(tnbc_missing)) stop("The clinically eligible TNBC list contains samples absent from the supplied expression matrix")
 
 audit <- data.table(
   metric = c(
@@ -58,7 +66,7 @@ fwrite(audit, file.path(result_dir, "cohort_audit.tsv"), sep = "\t")
 fwrite(data.table(sample_id = tnbc_missing),
        file.path(result_dir, "tnbc_samples_missing_from_matrix.tsv"), sep = "\t")
 
-message("[2/8] Loading only the 187 matched TNBC columns")
+message("[2/8] Loading only the ", length(tnbc_samples), " clinically verified TNBC columns")
 dt <- fread(matrix_file, select = c(header[1], tnbc_samples), check.names = FALSE)
 gene_id <- as.character(dt[[1]])
 expr <- as.matrix(dt[, -1, with = FALSE])
@@ -72,6 +80,18 @@ expr <- avereps(expr, ID = rownames(expr))
 expr <- expr[rowSums(is.finite(expr)) == ncol(expr), , drop = FALSE]
 expr <- expr[apply(expr, 1, sd) > 0, , drop = FALSE]
 stopifnot("IFI44L" %in% rownames(expr), ncol(expr) == length(tnbc_samples))
+response_expr <- expr[rownames(expr) != "IFI44L", , drop = FALSE]
+input_audit <- data.table(
+  metric = c("source_matrix_basename", "analysed_samples", "retained_variable_genes",
+             "response_genes_excluding_IFI44L", "archived_expression_min", "archived_expression_q25",
+             "archived_expression_median", "archived_expression_q75", "archived_expression_max",
+             "expression_units", "additional_transformation_applied", "upstream_release_and_normalization"),
+  value = c(basename(matrix_file), ncol(expr), nrow(expr), nrow(response_expr),
+            min(expr), quantile(expr, .25), median(expr), quantile(expr, .75), max(expr),
+            "archived expression units; not established as log2 fold-change units",
+            "none; archived matrix values used as supplied", "not recoverable from archived source metadata")
+)
+fwrite(input_audit, file.path(result_dir, "TCGA_TNBC_expression_input_audit.tsv"), sep = "\t")
 
 ifi <- as.numeric(expr["IFI44L", ])
 names(ifi) <- colnames(expr)
@@ -89,7 +109,7 @@ fwrite(sample_metadata, file.path(result_dir, "tnbc_sample_metadata.tsv"), sep =
 
 message("[3/8] Continuous IFI44L association model with BH-FDR")
 design_cont <- model.matrix(~ ifi_z)
-fit_cont <- eBayes(lmFit(expr, design_cont), trend = TRUE, robust = TRUE)
+fit_cont <- eBayes(lmFit(response_expr, design_cont), trend = TRUE, robust = TRUE)
 cont <- as.data.table(topTable(fit_cont, coef = "ifi_z", number = Inf,
                               adjust.method = "BH", sort.by = "none"), keep.rownames = "gene")
 setnames(cont, c("logFC", "AveExpr", "t", "P.Value", "adj.P.Val", "B"),
@@ -104,18 +124,16 @@ fwrite(cont[fdr_bh < 0.05],
 message("[4/8] Median high-versus-low sensitivity analysis with BH-FDR")
 design_group <- model.matrix(~ 0 + group)
 colnames(design_group) <- levels(group)
-fit_group <- contrasts.fit(lmFit(expr, design_group), makeContrasts(High - Low, levels = design_group))
+fit_group <- contrasts.fit(lmFit(response_expr, design_group), makeContrasts(High - Low, levels = design_group))
 fit_group <- eBayes(fit_group, trend = TRUE, robust = TRUE)
 de <- as.data.table(topTable(fit_group, number = Inf, adjust.method = "BH", sort.by = "none"),
                     keep.rownames = "gene")
 setnames(de, c("logFC", "AveExpr", "t", "P.Value", "adj.P.Val", "B"),
-         c("log2_difference_high_minus_low", "mean_expression", "moderated_t", "p_value", "fdr_bh", "lods"))
+         c("expression_difference_high_minus_low", "mean_expression", "moderated_t", "p_value", "fdr_bh", "lods"))
 de[, abs_moderated_t := abs(moderated_t)]
 setorder(de, fdr_bh, -abs_moderated_t)
 de[, abs_moderated_t := NULL]
 fwrite(de, file.path(result_dir, "median_group_differential_expression.tsv"), sep = "\t")
-fwrite(de[fdr_bh < 0.05 & abs(log2_difference_high_minus_low) >= 0.585],
-       file.path(result_dir, "median_group_DE_FDR05_absLFC0585.tsv"), sep = "\t")
 
 message("[5/8] GO Biological Process GSEA using the full continuous-model ranking")
 rank_dt <- cont[gene != "IFI44L" & is.finite(moderated_t), .(gene, moderated_t)]
@@ -123,11 +141,23 @@ mapping <- suppressMessages(bitr(rank_dt$gene, fromType = "SYMBOL", toType = "EN
                                  OrgDb = org.Hs.eg.db))
 rank_mapped <- merge(rank_dt, as.data.table(mapping), by.x = "gene", by.y = "SYMBOL")
 rank_mapped <- rank_mapped[order(-abs(moderated_t))][!duplicated(ENTREZID)]
+mapping_audit <- data.table(
+  metric = c("ranked_symbols_excluding_IFI44L", "symbols_mapped_to_ENTREZID",
+             "symbols_unmapped", "fraction_symbols_unmapped", "unique_ENTREZID_in_ranking",
+             "multiple_mapping_resolution", "GO_gene_set_size_min", "GO_gene_set_size_max",
+             "fgsea_nPermSimple", "random_seed"),
+  value = c(nrow(rank_dt), uniqueN(mapping$SYMBOL),
+            nrow(rank_dt) - uniqueN(mapping$SYMBOL),
+            (nrow(rank_dt) - uniqueN(mapping$SYMBOL)) / nrow(rank_dt), nrow(rank_mapped),
+            "retain largest absolute moderated t per ENTREZID", 15, 500, 10000, 20260831)
+)
+fwrite(mapping_audit, file.path(result_dir, "GSEA_GO_BP_mapping_audit.tsv"), sep = "\t")
 gene_list <- rank_mapped$moderated_t
 names(gene_list) <- rank_mapped$ENTREZID
 gene_list <- sort(gene_list, decreasing = TRUE)
 
-gsea_go <- suppressMessages(gseGO(
+gsea_warnings <- character()
+gsea_go <- withCallingHandlers(suppressMessages(gseGO(
   geneList = gene_list,
   OrgDb = org.Hs.eg.db,
   ont = "BP",
@@ -141,9 +171,42 @@ gsea_go <- suppressMessages(gseGO(
   nPermSimple = 10000,
   verbose = FALSE,
   seed = TRUE
-))
-go_tab <- as.data.table(as.data.frame(gsea_go))
+)), warning = function(w) {
+  gsea_warnings <<- c(gsea_warnings, conditionMessage(w))
+})
+# DOSE/clusterProfiler filters unresolved p-values before returning gseaResult.
+# Reconstruct the eligible test population from its stored gene sets and the
+# exact ranking; retain omitted eligible IDs as explicitly unresolved rows.
+go_tab <- as.data.table(gsea_go@result)
+eligible_set_sizes <- vapply(gsea_go@geneSets, function(members) {
+  length(intersect(members, names(gene_list)))
+}, integer(1))
+eligible_ids <- names(eligible_set_sizes)[eligible_set_sizes >= 15 & eligible_set_sizes <= 500]
+unresolved_ids <- setdiff(eligible_ids, go_tab$ID)
+go_tab[, result_status := "resolved"]
+if (length(unresolved_ids)) {
+  unresolved <- data.table(
+    ID = unresolved_ids, Description = paste("Unresolved pathway", unresolved_ids),
+    setSize = unname(eligible_set_sizes[unresolved_ids]),
+    enrichmentScore = NA_real_, NES = NA_real_, pvalue = NA_real_, p.adjust = NA_real_,
+    qvalue = NA_real_, rank = NA_integer_, leading_edge = NA_character_,
+    core_enrichment = NA_character_,
+    result_status = "eligible pathway omitted by fgsea/DOSE because p-value or NES was unresolved"
+  )
+  go_tab <- rbindlist(list(go_tab, unresolved), use.names = TRUE, fill = TRUE)
+}
 fwrite(go_tab, file.path(result_dir, "GSEA_GO_BP_all.tsv"), sep = "\t")
+fwrite(go_tab[!is.finite(NES) | !is.finite(pvalue) | !is.finite(p.adjust)],
+       file.path(result_dir, "GSEA_GO_BP_unresolved.tsv"), sep = "\t")
+writeLines(if (length(gsea_warnings)) gsea_warnings else "No fgsea warnings reported",
+           file.path(result_dir, "GSEA_GO_BP_warnings.txt"))
+fwrite(data.table(
+  metric = c("all_pathway_rows", "rows_with_finite_NES_and_adjusted_p", "unresolved_pathway_rows",
+             "BH_FDR05_pathways", "warnings_count"),
+  value = c(nrow(go_tab), sum(is.finite(go_tab$NES) & is.finite(go_tab$p.adjust)),
+            sum(!is.finite(go_tab$NES) | !is.finite(go_tab$pvalue) | !is.finite(go_tab$p.adjust)),
+            sum(go_tab$p.adjust < 0.05, na.rm = TRUE), length(gsea_warnings))
+), file.path(result_dir, "GSEA_GO_BP_test_audit.tsv"), sep = "\t")
 if (nrow(go_tab)) {
   fwrite(go_tab[p.adjust < 0.05], file.path(result_dir, "GSEA_GO_BP_FDR05.tsv"), sep = "\t")
 }
@@ -192,14 +255,17 @@ setorder(sig_cor, fdr_bh, -abs_spearman_rho)
 sig_cor[, abs_spearman_rho := NULL]
 fwrite(sig_cor, file.path(result_dir, "IFI44L_immune_signature_correlations.tsv"), sep = "\t")
 
-message("[7/8] Checkpoint correlations before and after interferon/immune-state adjustment")
+message("[7/8] Checkpoint correlations with rank-based, target-excluded adjustment")
 checkpoints <- intersect(c("CD274", "PDCD1", "PDCD1LG2", "CTLA4", "LAG3", "HAVCR2", "TIGIT", "TNFRSF4", "TNFRSF9"),
                          rownames(expr))
 cov_names <- intersect(c("IFN_ALPHA_RESPONSE", "IFN_GAMMA_RESPONSE", "T_CELL_INFLAMED", "EPITHELIAL_CONTENT"),
                        rownames(ssgsea_scores))
 cov_df <- as.data.frame(t(ssgsea_scores[cov_names, , drop = FALSE]))
+
+# Preserve the historical raw-expression residual/Spearman calculation as a
+# sensitivity analysis only. It is not a conventional partial Spearman test.
 ifi_resid <- resid(lm(ifi ~ ., data = cov_df))
-checkpoint_cor <- rbindlist(lapply(checkpoints, function(gene) {
+legacy_checkpoint_cor <- rbindlist(lapply(checkpoints, function(gene) {
   raw <- suppressWarnings(cor.test(ifi, expr[gene, ], method = "spearman", exact = FALSE))
   gene_resid <- resid(lm(expr[gene, ] ~ ., data = cov_df))
   adj <- suppressWarnings(cor.test(ifi_resid, gene_resid, method = "spearman", exact = FALSE))
@@ -208,21 +274,98 @@ checkpoint_cor <- rbindlist(lapply(checkpoints, function(gene) {
              adjusted_spearman_rho = unname(adj$estimate), adjusted_p_value = adj$p.value,
              adjusted_for = paste(cov_names, collapse = ";"))
 }))
+legacy_checkpoint_cor[, raw_fdr_bh := p.adjust(raw_p_value, "BH")]
+legacy_checkpoint_cor[, adjusted_fdr_bh := p.adjust(adjusted_p_value, "BH")]
+legacy_checkpoint_cor[, method := "legacy Spearman correlation of raw-scale OLS residuals; uncorrected cor.test degrees of freedom"]
+fwrite(legacy_checkpoint_cor,
+       file.path(result_dir, "IFI44L_checkpoint_legacy_residual_spearman_sensitivity.tsv"), sep = "\t")
+
+# Partial Spearman is Pearson correlation of rank residuals. The t reference
+# uses n-k-2 degrees of freedom, where k is the rank of the covariate design
+# excluding its intercept. This is an approximate, two-sided partial-rank test.
+partial_spearman <- function(x, y, covariates) {
+  values <- cbind(x = x, y = y, as.matrix(covariates))
+  values <- values[apply(values, 1, function(z) all(is.finite(z))), , drop = FALSE]
+  ranked <- apply(values, 2, rank, ties.method = "average")
+  design <- cbind(Intercept = 1, ranked[, -(1:2), drop = FALSE])
+  qr_design <- qr(design)
+  x_residual <- qr.resid(qr_design, ranked[, "x"])
+  y_residual <- qr.resid(qr_design, ranked[, "y"])
+  rho <- unname(cor(x_residual, y_residual, method = "pearson"))
+  df <- nrow(values) - qr_design$rank - 1L
+  if (!is.finite(rho) || df <= 0) stop("Invalid partial Spearman model")
+  statistic <- rho * sqrt(df / max(1 - rho^2, .Machine$double.eps))
+  list(rho = rho, p_value = 2 * pt(abs(statistic), df = df, lower.tail = FALSE),
+       n = nrow(values), covariate_rank = qr_design$rank - 1L, df = df)
+}
+
+adjustment_definitions <- list()
+model_definitions <- list()
+shared_rank_sensitivity <- list()
+checkpoint_rows <- list()
+for (gene in checkpoints) {
+  target_signatures <- lapply(signatures[cov_names], function(members) {
+    intersect(setdiff(members, c("IFI44L", gene)), rownames(expr))
+  })
+  if (any(lengths(target_signatures) < 2)) stop("Insufficient genes in target-excluded adjustment signature")
+  target_scores <- gsva(ssgseaParam(expr, target_signatures, minSize = 2,
+                                   maxSize = 500, normalize = TRUE), verbose = FALSE)
+  target_covariates <- as.data.frame(t(target_scores[cov_names, , drop = FALSE]))
+  adjusted <- partial_spearman(ifi, expr[gene, ], target_covariates)
+  shared_adjusted <- partial_spearman(ifi, expr[gene, ], cov_df)
+  raw <- suppressWarnings(cor.test(ifi, expr[gene, ], method = "spearman", exact = FALSE))
+  checkpoint_rows[[gene]] <- data.table(
+    gene = gene, raw_spearman_rho = unname(raw$estimate), raw_p_value = raw$p.value,
+    adjusted_spearman_rho = adjusted$rho, adjusted_p_value = adjusted$p_value,
+    adjusted_for = paste(cov_names, collapse = ";"), n = adjusted$n,
+    covariate_rank = adjusted$covariate_rank, degrees_of_freedom = adjusted$df,
+    method = "rank-all-variables; OLS residualization; Pearson correlation of rank residuals; two-sided approximate t test",
+    adjustment_signature_policy = "exclude IFI44L and current checkpoint gene from every adjustment signature"
+  )
+  shared_rank_sensitivity[[gene]] <- data.table(
+    gene = gene, adjusted_spearman_rho = shared_adjusted$rho,
+    adjusted_p_value = shared_adjusted$p_value, n = shared_adjusted$n,
+    covariate_rank = shared_adjusted$covariate_rank, degrees_of_freedom = shared_adjusted$df,
+    method = "rank-based partial Spearman with shared modules before checkpoint-specific exclusion"
+  )
+  adjustment_definitions[[gene]] <- rbindlist(lapply(cov_names, function(signature) {
+    members <- signatures[[signature]]
+    data.table(checkpoint = gene, signature = signature, gene = members,
+               present = members %in% rownames(expr),
+               used_for_adjustment = members %in% target_signatures[[signature]])
+  }))
+  model_definitions[[gene]] <- data.table(
+    checkpoint = gene, predictor = "IFI44L", n = adjusted$n,
+    covariates = paste(cov_names, collapse = ";"), covariate_rank = adjusted$covariate_rank,
+    degrees_of_freedom = adjusted$df,
+    excluded_signature_members = paste(intersect(gene, unique(unlist(signatures[cov_names]))), collapse = ";"),
+    signature_scoring = "ssGSEA on full expression matrix; signature members exclude IFI44L and current checkpoint",
+    test = "Pearson correlation of rank residuals; t reference df=n-k-2",
+    multiplicity = "BH across the nine checkpoint-specific primary tests"
+  )
+}
+checkpoint_cor <- rbindlist(checkpoint_rows)
 checkpoint_cor[, raw_fdr_bh := p.adjust(raw_p_value, "BH")]
 checkpoint_cor[, adjusted_fdr_bh := p.adjust(adjusted_p_value, "BH")]
 fwrite(checkpoint_cor, file.path(result_dir, "IFI44L_checkpoint_partial_correlations.tsv"), sep = "\t")
+shared_rank_cor <- rbindlist(shared_rank_sensitivity)
+shared_rank_cor[, adjusted_fdr_bh := p.adjust(adjusted_p_value, "BH")]
+fwrite(shared_rank_cor, file.path(result_dir, "IFI44L_checkpoint_shared_module_rank_partial_sensitivity.tsv"), sep = "\t")
+fwrite(rbindlist(adjustment_definitions),
+       file.path(result_dir, "IFI44L_checkpoint_adjustment_signature_definitions.tsv"), sep = "\t")
+fwrite(rbindlist(model_definitions),
+       file.path(result_dir, "IFI44L_checkpoint_model_definitions.tsv"), sep = "\t")
 
 message("[8/8] Publication-oriented diagnostic figures and session information")
 volcano <- copy(de)
-volcano[, status := fifelse(fdr_bh < 0.05 & log2_difference_high_minus_low >= 0.585, "Higher",
-                            fifelse(fdr_bh < 0.05 & log2_difference_high_minus_low <= -0.585, "Lower", "Not selected"))]
+volcano[, status := fifelse(fdr_bh < 0.05 & expression_difference_high_minus_low > 0, "Higher",
+                            fifelse(fdr_bh < 0.05 & expression_difference_high_minus_low < 0, "Lower", "Not significant"))]
 volcano[, neglog10_fdr := -log10(pmax(fdr_bh, .Machine$double.xmin))]
-p1 <- ggplot(volcano, aes(log2_difference_high_minus_low, neglog10_fdr, color = status)) +
+p1 <- ggplot(volcano, aes(expression_difference_high_minus_low, neglog10_fdr, color = status)) +
   geom_point(size = 0.7, alpha = 0.55) +
-  scale_color_manual(values = c(Higher = "#B2182B", Lower = "#2166AC", `Not selected` = "grey75")) +
-  geom_vline(xintercept = c(-0.585, 0.585), linetype = 2, linewidth = 0.35) +
+  scale_color_manual(values = c(Higher = "#B2182B", Lower = "#2166AC", `Not significant` = "grey75")) +
   geom_hline(yintercept = -log10(0.05), linetype = 2, linewidth = 0.35) +
-  labs(x = "Expression difference: IFI44L-high minus low", y = expression(-log[10](BH-FDR)), color = NULL) +
+  labs(x = "Expression difference: high minus low (archived units)", y = expression(-log[10](BH-FDR)), color = NULL) +
   theme_classic(base_size = 11)
 ggsave(file.path(figure_dir, "bulk_median_group_volcano.pdf"), p1, width = 6.2, height = 5.2)
 ggsave(file.path(figure_dir, "bulk_median_group_volcano.png"), p1, width = 6.2, height = 5.2, dpi = 400)

@@ -1,32 +1,31 @@
-# Public code snapshot validation report
+# v1.2.0 validation status
 
-Validation date: 8 November 2026
+Status recorded: 9 November 2026. The previous v1.1.0/187-sample validation statements are superseded. This report separates completed bounded numerical replays from later non-inferential edits and release-level checks.
 
-Snapshot: `v1.1.0`
+## Completed checks with retained evidence
 
-## Checks completed
-
-| Check | Result | Scope |
+| Check | Result | Exact scope |
 |---|---|---|
-| Python syntax compilation | PASS | All Python scripts |
-| R syntax parsing | PASS | Analysis scripts and the R package installer |
-| TCGA-CDR file integrity | PASS | MD5 `a4591b2dcee39591f59e5e25a6ce75fa` in preserved workspace |
-| TCGA OS/PFI join | PASS | 187 expression samples mapped to 187 unique patients |
-| TCGA survival models | PASS | OS 24 events; PFI 30 events; unadjusted and age-adjusted continuous models |
-| Revised Figure 2 build | PASS | GSE58812 and TCGA survival results displayed together, including non-significant TCGA estimates |
-| Revised Figure 5 build | PASS | Public-multiomics descriptive synthesis; no local or cell-line branch |
-| Input and environment preflight against preserved workspace | PASS | Declared public inputs and required packages available |
-| Author/contact information scan | PASS | No deferred author names, contribution statement or correspondence email detected |
-| Local-path scan | PASS | No local absolute filesystem path or removable-volume path detected |
-| Common secret-pattern scan | PASS | No password, API-key, token or private-key pattern detected |
-| Redistribution boundary | PASS | No third-party raw data, local patient/IHC material, cell-line measurements or manuscript source included |
+| Corrected main/strict bulk and survival snapshots | PASS: bounded local replay | Full main 151 and strict 110 snapshots exited 0. IFI44L was removed before limma response fitting/moderation/BH and ranked enrichment. Main 53,074 response genes (2,314 FDR<0.05); strict 52,591 (1,136 FDR<0.05). The retained receipt is `BULK_SURVIVAL_REPLAY_VALIDATION_V13.json` (`PASS_BOUNDED_LOCAL_REPLAY`). |
+| TCGA target-excluded rank adjustment | PASS within those executed TCGA snapshots | Rank-all-variables OLS residualization, Pearson rank-residual correlation and approximate t degrees of freedom; target-specific modules exclude IFI44L and current checkpoint. Shared-rank and legacy residual calculations are TCGA sensitivity tables. GSE58812 has unadjusted Spearman checkpoint correlations with BH correction, without partial/leave-one-target-out adjustment. This does not prove causal regulation. |
+| Enrichment accounting | PASS: denominator/unresolved accounting | Main 5,053 eligible pathways: 5,048 resolved, 5 unresolved, 1,744 BH-FDR<0.05. Strict 5,050: 5,045 resolved, 5 unresolved, 1,751 BH-FDR<0.05. Warnings and unresolved rows are retained rather than counted as resolved negatives. |
+| GSE58812 preserved-output comparison | PASS | Replayed clinical, continuous Cox, immune-signature and unadjusted Spearman checkpoint-correlation tables matched preserved outputs. No partial/leave-one-target-out checkpoint adjustment was performed. This does not add missing stage/grade/node covariates. |
+| Clinical selection | PASS within bounded replay | Main 151 / strict 110 unique patients; outcome-independent ER/PR/HER2 reconciliation; no PAM50 inclusion. Clinical commit `4c975725c54df7e31e0610fad22a742ad01cdfa3`, SHA-256 `973b6e03436330e0563a15989d04fb3566a2c7cdc66db9aaa3badbb32c58badc`. |
+| Supporting-input ZIP integrity | PASS | Both Additional files 3/4 ZIP CRC tests completed. Concatenated parts match SHA-256 `2af76ae44807e00e7bfe269655ba43cc7162f0b63ed0c1e036fc1d502cfe6904`; restored content size 27,173,060 bytes. Bundled clinical bytes match the pinned SHA above. |
+| Frozen-input route: selection, exact read, core limma and survival | PASS | Without the original matrix or old eligibility list, restored input selected the same 151 patients. Gene labels and all 151-column expression values were identical. Core limma coefficients, P values and BH-FDR matched; all values in the 151-row sample-metadata table and both 53,074-row association/median-group tables matched. `06_tcga_tnbc_survival.R` then reproduced the merged survival, continuous Cox and median-split log-rank tables identically. Receipts: `frozen_input_restore_validation.json`, `FROZEN_MATRIX_CORE_REPLAY_AUDIT.tsv`, `FROZEN_CORE_REPLAY_COMPARISON.tsv`, `FROZEN_SURVIVAL_REPLAY_COMPARISON.tsv`. This check did not rerun GSEA through the frozen route. |
+| Single-cell/spatial numerical replay | PASS | Executed scripts exited 0; 12 single-cell and 7 spatial tables matched at tolerance `1e-10`; 499 spatial permutations. Same h5ad SHA-256 `04245d73cdcc0b473aa88ec655d1bcb051dbbd5f9a3d1aec4c2f37b1f0645df4`. |
+| Kaplan–Meier helper against R | PASS | Eight endpoint/group comparisons: GSE58812 MFS/OS (107 patients) and corrected TCGA OS/PFI (151 patients). Survival, 95% log-log CIs and risk sets matched `survival::survfit`; maximum reported absolute survival/CI error `5.56e-16`. Actual plotting-helper AST was tested, with standard-library normal quantile replacing scipy import for this bounded helper test. |
 
-## Numerical result boundary
+The bulk receipt records `full_bulk_execution_snapshot_sha256` as `cc67fef20ef712b6e581978457739adb80b31b781cde94fb60a330e6f073153a`. The post-label code SHA-256 is `97b8e8d7ed57cf610c335b87610c205c4901b68581e364eeae12b71850fc0916`; it must not be described as the full-execution snapshot. Subsequent expression-unit label/diagnostic-only edits were separately executed and R-parsed successfully. They were not a second complete limma/GSEA end-to-end run. The final `expression_difference_high_minus_low` field describes an archived-unit difference; the unsupported fold-change cutoff is removed. Final repository hashes must reflect the sealed code while retaining the separate execution-snapshot hash.
 
-TCGA continuous IFI44L estimates were directionally favourable but non-significant: OS unadjusted HR 0.829 (95% CI 0.546–1.259; P=0.378), OS age-adjusted HR 0.835 (0.554–1.259; P=0.389), PFI unadjusted HR 0.839 (0.582–1.209; P=0.346), and PFI age-adjusted HR 0.837 (0.579–1.211; P=0.346). Median-split curves are graphical sensitivity analyses only.
+Other retained author-audit receipts are `SC_spatial_replay_comparison.json` and `KM_python_R_crosscheck.json`. The numerical replay environment used Python 3.12.13 with preserved packages including numpy 2.5.2, pandas 2.3.3 and scanpy 1.12.1. Exact R session information and package records accompany the analysis logs/environment files. These checks used preserved public inputs, not independent reacquisition and processing of raw sequencing.
 
-Pathologic-stage adjustment was not promoted because stage-I OS events were absent and stage-I PFI events were sparse. The analysis therefore does not claim independent prognostic value.
+## Final local code checks
+
+All Python scripts passed AST parsing and all R scripts passed `parse()`. The final analysis preflight passed input availability, Python/R package availability, all expected outputs and 28 complete spatial sample directories. PyMuPDF is not imported by the analysis or figure scripts and is not a mandatory analysis preflight dependency; optional PDF auditing used pypdf/reportlab separately. All five final PDFs passed the recorded technical figure audit after numerical replay. Public-content scanning found no local patient/IHC material or personal workstation paths in the released files. The SHA-256 manifest is regenerated from this sealed snapshot.
+
+The accompanying manuscript and release receipt identify the immutable public commit after remote-tree verification; this file does not embed a circular hash of its own commit. Spreadsheet/document rendering and package-level integrity are separate editorial checks. Earlier v1.1.0 checks do not establish validation for changed files.
 
 ## Interpretation boundary
 
-These checks establish static executability and a bounded local rerun against preserved public inputs. They do not constitute a fully independent numerical reproduction from newly downloaded source files, scientific peer review, clinical validation or submission readiness.
+Upstream expression release, normalization and units are unavailable in the archived records. Exact decimal preservation makes downstream calculations auditable but does not recover that provenance or establish a log2 scale. Module scores do not measure cell abundance or tumour purity; Visium does not establish single-cell co-expression. A numerical replay does not establish clinical utility, independent prognostic performance, causal mechanism, author approval, scientific peer review or submission readiness.

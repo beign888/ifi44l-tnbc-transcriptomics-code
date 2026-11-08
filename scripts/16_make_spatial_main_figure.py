@@ -11,6 +11,7 @@ from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as path_effects
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -31,9 +32,9 @@ def set_style() -> None:
         "font.size": 7,
         "axes.labelsize": 7,
         "axes.titlesize": 7,
-        "xtick.labelsize": 6.2,
-        "ytick.labelsize": 6.2,
-        "legend.fontsize": 6.0,
+        "xtick.labelsize": 6.6,
+        "ytick.labelsize": 6.6,
+        "legend.fontsize": 6.6,
         "axes.linewidth": 0.75,
         "axes.spines.top": False,
         "axes.spines.right": False,
@@ -68,7 +69,7 @@ def load_analysis_module(project: Path):
 
 
 def spatial_panel(ax: plt.Axes, image: np.ndarray, frame: pd.DataFrame, scale: float,
-                  column: str, title: str, cmap: str) -> None:
+                  column: str, title: str, cmap: str, scalebar_px: float) -> None:
     ax.imshow(image)
     x = frame["pxl_col_fullres"].to_numpy() * scale
     y = frame["pxl_row_fullres"].to_numpy() * scale
@@ -79,9 +80,17 @@ def spatial_panel(ax: plt.Axes, image: np.ndarray, frame: pd.DataFrame, scale: f
     ax.set_title(title, loc="left", fontweight="bold")
     ax.set_axis_off()
     cbar = ax.figure.colorbar(scatter, ax=ax, fraction=0.04, pad=0.015)
-    cbar.ax.tick_params(labelsize=5.2, length=2)
+    cbar.ax.tick_params(labelsize=6.6, length=2)
     cbar.outline.set_linewidth(0.4)
-    cbar.set_label("Normalized expression", fontsize=5.4)
+    cbar.set_label("Normalized expression", fontsize=6.6)
+    # Full-resolution pixels per nominal 55-um Visium capture spot come from
+    # the original Space Ranger scalefactors, then scale to the plotted image.
+    x0, y0 = image.shape[1] * 0.12, image.shape[0] * 0.91
+    scale_line = ax.plot([x0, x0 + scalebar_px], [y0, y0], color="white", lw=2.0)[0]
+    scale_line.set_path_effects([path_effects.Stroke(linewidth=3.1, foreground="black"), path_effects.Normal()])
+    scale_text = ax.text(x0 + scalebar_px / 2, y0 - image.shape[0] * 0.025, "500 μm",
+        color="white", ha="center", va="bottom", fontsize=6.6)
+    scale_text.set_path_effects([path_effects.Stroke(linewidth=1.5, foreground="black"), path_effects.Normal()])
 
 
 def main() -> None:
@@ -108,7 +117,12 @@ def main() -> None:
     with gzip.open(image_path, "rb") as handle:
         image = np.asarray(Image.open(handle).convert("RGB"))
     with gzip.open(scale_path, "rt") as handle:
-        scale = float(json.load(handle)["tissue_hires_scalef"])
+        scalefactors = json.load(handle)
+    scale = float(scalefactors["tissue_hires_scalef"])
+    spot_diameter_fullres_px = float(scalefactors["spot_diameter_fullres"])
+    nominal_spot_diameter_um = 55.0
+    scalebar_um = 500.0
+    scalebar_px = scalebar_um / nominal_spot_diameter_um * spot_diameter_fullres_px * scale
 
     fig = plt.figure(figsize=(7.2, 5.8), constrained_layout=True)
     gs = fig.add_gridspec(2, 3, height_ratios=[1.02, 0.98], width_ratios=[1.04, 1.0, 1.0])
@@ -119,11 +133,11 @@ def main() -> None:
     ax_e = fig.add_subplot(gs[1, 1])
     ax_f = fig.add_subplot(gs[1, 2])
 
-    spatial_panel(ax_a, image, frame, scale, "IFI44L", "IFI44L", "magma")
-    spatial_panel(ax_b, image, frame, scale, "IFN_response_excluding_IFI44L", "IFN response", "viridis")
-    spatial_panel(ax_c, image, frame, scale, "Epithelial", "Epithelial module", "cividis")
+    spatial_panel(ax_a, image, frame, scale, "IFI44L", "IFI44L", "magma", scalebar_px)
+    spatial_panel(ax_b, image, frame, scale, "IFN_response_excluding_IFI44L", "IFN response", "viridis", scalebar_px)
+    spatial_panel(ax_c, image, frame, scale, "Epithelial", "Epithelial module", "cividis", scalebar_px)
     ax_a.text(0.01, -0.06, f"Prespecified section: {representative['patient_id']} / {gsm}",
-              transform=ax_a.transAxes, fontsize=5.4, color=GREY, ha="left", va="top")
+              transform=ax_a.transAxes, fontsize=6.6, color=GREY, ha="left", va="top")
     panel_label(ax_a, "a", x=-0.08)
     panel_label(ax_b, "b", x=-0.08)
     panel_label(ax_c, "c", x=-0.08)
@@ -188,6 +202,15 @@ def main() -> None:
         "selection_rule": "section closest to cohort median IFI44L detection fraction",
         "image_processing": "unaltered H&E background with normalized-expression spot overlay",
         "inference_unit": "patient after averaging two sections",
+        "scale_bar": {
+            "length_um": scalebar_um,
+            "nominal_Visium_spot_diameter_um": nominal_spot_diameter_um,
+            "spot_diameter_fullres_pixels": spot_diameter_fullres_px,
+            "tissue_hires_scalef": scale,
+            "rendered_bar_pixels": scalebar_px,
+            "formula": "length_um / 55 * spot_diameter_fullres * tissue_hires_scalef",
+            "source_scalefactors": scale_path.name,
+        },
     }
     (out_dir / "figure_build_audit_figure4_final.json").write_text(json.dumps(audit, indent=2), encoding="utf-8")
 

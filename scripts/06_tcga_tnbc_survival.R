@@ -97,7 +97,7 @@ cox_row <- function(data, endpoint, model_label, formula) {
     IFI44L_PH_test_p = unname(zph_table[term, "p"]),
     global_PH_test_p = unname(zph_table["GLOBAL", "p"]),
     ties = "Efron",
-    estimand = "cause-unspecific relative hazard per 1-SD higher IFI44L expression"
+    estimand = "relative hazard for the specified endpoint per 1-SD higher IFI44L expression"
   )
 }
 
@@ -154,7 +154,7 @@ audit <- rbindlist(list(
   data.table(metric = "PFI_events_stage_I", value = sum(merged[stage_group == "I"]$PFI_event, na.rm = TRUE)),
   data.table(metric = "continuous_primary_predictor", value = "standardized IFI44L expression"),
   data.table(metric = "adjusted_model_status", value = "age-adjusted sensitivity only"),
-  data.table(metric = "stage_adjustment_status", value = "not fitted because stage-I OS events were absent and stage-I PFI events were sparse"),
+  data.table(metric = "stage_adjustment_status", value = "not fitted; exploratory age-adjusted sensitivity only because overall and stage-specific event counts were limited"),
   data.table(metric = "patient_level_unit_of_inference", value = "true")
 ), fill = TRUE)
 
@@ -168,6 +168,17 @@ fwrite(merged[, ..public_columns], file.path(result_dir, "TCGA_TNBC_survival_mer
 fwrite(cox_results, file.path(result_dir, "TCGA_TNBC_continuous_IFI44L_Cox.tsv"), sep = "\t")
 fwrite(logrank_rows, file.path(result_dir, "TCGA_TNBC_median_split_logrank_sensitivity.tsv"), sep = "\t")
 fwrite(audit, file.path(result_dir, "TCGA_TNBC_survival_audit.tsv"), sep = "\t")
+model_definitions <- copy(cox_results[, .(cohort, endpoint, model, n, events, ties, estimand)])
+model_definitions[, `:=`(
+  predictor = "IFI44L archived expression values standardized using sample SD within the clinically verified cohort",
+  adjustment = ifelse(model == "Age-adjusted", "age standardized using sample SD within cohort", "none"),
+  endpoint_source = "TCGA Pan-Cancer Clinical Data Resource",
+  outcome_merge_key = "first 12 characters of TCGA expression barcode = bcr_patient_barcode",
+  median_split_role = "graphical sensitivity only; High strictly above median, Low at or below median"
+)]
+fwrite(model_definitions, file.path(result_dir, "TCGA_TNBC_Cox_model_definitions.tsv"), sep = "\t")
+stage_events <- merged[, .(n = .N, OS_events = sum(OS_event), PFI_events = sum(PFI_event)), by = stage_group]
+fwrite(stage_events, file.path(result_dir, "TCGA_TNBC_stage_event_counts.tsv"), sep = "\t")
 
 writeLines(capture.output(sessionInfo()), file.path(log_dir, "TCGA_TNBC_survival_R_sessionInfo.txt"))
 print(cox_results)

@@ -30,9 +30,9 @@ def set_style() -> None:
         "font.size": 7,
         "axes.labelsize": 7,
         "axes.titlesize": 7,
-        "xtick.labelsize": 6.5,
-        "ytick.labelsize": 6.5,
-        "legend.fontsize": 6.5,
+        "xtick.labelsize": 6.6,
+        "ytick.labelsize": 6.6,
+        "legend.fontsize": 6.6,
         "axes.linewidth": 0.75,
         "axes.spines.top": False,
         "axes.spines.right": False,
@@ -82,6 +82,9 @@ def figure3(project: Path, out_dir: Path) -> dict[str, object]:
     source = project / "results" / "single_cell"
     summary = pd.read_csv(source / "GSE176078_TNBC_IFI44L_celltype_major_summary.tsv", sep="\t")
     donor = pd.read_csv(source / "GSE176078_TNBC_IFI44L_by_donor_celltype_major.tsv", sep="\t")
+    # Use the same donor-compartment eligibility rule as the paired tests.
+    # Otherwise low-cell groups are displayed despite being excluded from inference.
+    donor = donor.loc[donor["n_cells"] >= 20].copy()
     tests = pd.read_csv(source / "GSE176078_TNBC_author_major_paired_tests.tsv", sep="\t")
     subset = pd.read_csv(source / "GSE176078_TNBC_IFI44L_celltype_subset_summary.tsv", sep="\t")
 
@@ -106,7 +109,7 @@ def figure3(project: Path, out_dir: Path) -> dict[str, object]:
     ax_a.set_title("Major cell compartments", loc="left", fontweight="bold")
     ax_a.set_xlim(left=0)
     ax_a.text(0.98, 0.04, "Dot size: median detection", transform=ax_a.transAxes,
-              ha="right", va="bottom", fontsize=5.5, color=GREY)
+              ha="right", va="bottom", fontsize=6.6, color=GREY)
     panel_label(ax_a, "a", x=-0.27)
 
     # b: donor-by-compartment heatmap
@@ -133,6 +136,7 @@ def figure3(project: Path, out_dir: Path) -> dict[str, object]:
 
     # c: paired donor differences against malignant epithelium
     classes = ["Myeloid", "Endothelial", "T-cells", "CAFs", "PVL"]
+    comparison_q = []
     for i, cell_class in enumerate(classes):
         wide_unfiltered = donor.loc[donor["celltype_major"].isin([cell_class, "Cancer Epithelial"])].pivot(
             index="donor_id", columns="celltype_major", values="IFI44L_mean_logCP10k"
@@ -147,10 +151,16 @@ def figure3(project: Path, out_dir: Path) -> dict[str, object]:
         ax_c.plot([i - 0.18, i + 0.18], [np.median(diff)] * 2, color=BLACK, lw=1.4)
         row = tests.loc[(tests["cell_class"] == cell_class) & (tests["endpoint"] == "IFI44L_mean_logCP10k")]
         if len(row):
-            ax_c.text(i, 1.50, f"q={row.iloc[0]['fdr_bh']:.3f}",
-                      ha="center", va="bottom", fontsize=5.3)
+            comparison_q.append((i, float(row.iloc[0]["fdr_bh"])))
+    if comparison_q and np.allclose([q for _, q in comparison_q], comparison_q[0][1]):
+        ax_c.text(0.03, 0.98, f"All five comparisons: q = {comparison_q[0][1]:.3f}",
+                  transform=ax_c.transAxes, ha="left", va="top", fontsize=6.6)
+    else:
+        for i, q in comparison_q:
+            ax_c.text(i, 1.45, f"q =\n{q:.3f}", ha="center", va="bottom", fontsize=6.6)
     ax_c.axhline(0, color=GREY, lw=0.8, ls="--")
     ax_c.set_xticks(range(len(classes)), ["Myeloid", "Endo-\nthelial", "T cells", "CAFs", "PVL"])
+    ax_c.set_xlim(-0.65, len(classes) - 0.35)
     ax_c.set_ylabel("Paired difference versus\ncancer epithelium")
     ax_c.set_ylim(-0.25, 1.65)
     ax_c.set_title("Within-patient comparison", loc="left", fontweight="bold")
@@ -168,12 +178,16 @@ def figure3(project: Path, out_dir: Path) -> dict[str, object]:
     ax_d.set_xlim(0, 1.82)
     ax_d.set_title("IFI44L-high cellular states", loc="left", fontweight="bold")
     for yi, (_, row) in enumerate(top.iterrows()):
-        ax_d.text(1.74, yi, f"n={int(row['n_donors'])}", ha="right", va="center", fontsize=5.5, color=GREY)
+        ax_d.text(1.74, yi, f"n={int(row['n_donors'])}", ha="right", va="center", fontsize=6.6, color=GREY)
     panel_label(ax_d, "d", x=-0.18)
 
     base = out_dir / "Figure3_single_cell_compartment"
     save_bundle(fig, base)
     return {"figure": "Figure 3", "base": str(base), "n_patients": 10, "n_cells": 42512,
+            "minimum_cells_per_donor_compartment": 20,
+            "paired_donor_counts": {cell_class: int(tests.loc[(tests["cell_class"] == cell_class) &
+                (tests["endpoint"] == "IFI44L_mean_logCP10k"), "n_paired_donors"].iloc[0])
+                for cell_class in classes},
             "inference_unit": "patient", "panels": ["a", "b", "c", "d"]}
 
 

@@ -48,6 +48,12 @@ def main() -> None:
     env["MPLCONFIGDIR"] = str(project / ".matplotlib-cache")
     Path(env["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
 
+    original_matrix = raw_root / "数据/差异富集分析/3 差异分析/symbol.BRCA.txt"
+    frozen_matrix = source / "TCGA_frozen/TCGA_BRCA_TNBC_frozen.tsv.gz"
+    if not original_matrix.exists() and not frozen_matrix.exists():
+        run_step("00_restore_frozen_tcga", [str(python), str(scripts / "00_restore_frozen_tcga_input.py"),
+                 "--project", str(project)], raw_root, log_dir, env)
+
     preflight = [str(python), str(scripts / "17_reproducibility_preflight.py"),
                  "--project", str(project), "--raw-root", str(raw_root)]
     run_step("00_preflight", preflight, raw_root, log_dir, env)

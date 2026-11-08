@@ -66,7 +66,9 @@ def read_positions(path: Path) -> pd.DataFrame:
 
 
 def find_one(sample_dir: Path, pattern: str) -> Path:
-    hits = list(sample_dir.glob(pattern))
+    # Removable macOS volumes may contain AppleDouble metadata sidecars.
+    hits = [path for path in sample_dir.glob(pattern)
+            if path.is_file() and not path.name.startswith("._") and path.name != ".DS_Store"]
     if len(hits) != 1:
         raise RuntimeError(f"Expected one {pattern} under {sample_dir}, found {len(hits)}")
     return hits[0]

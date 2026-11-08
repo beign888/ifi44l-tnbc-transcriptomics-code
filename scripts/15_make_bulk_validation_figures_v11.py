@@ -19,7 +19,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 import numpy as np
 import pandas as pd
-from scipy.stats import chi2
+from scipy.stats import chi2, norm
 
 
 BLUE = "#2B6CA3"
@@ -42,9 +42,9 @@ def set_style() -> None:
         "font.size": 7,
         "axes.labelsize": 7,
         "axes.titlesize": 7.2,
-        "xtick.labelsize": 6.2,
-        "ytick.labelsize": 6.2,
-        "legend.fontsize": 6.0,
+        "xtick.labelsize": 6.6,
+        "ytick.labelsize": 6.6,
+        "legend.fontsize": 6.6,
         "axes.linewidth": 0.75,
         "axes.spines.top": False,
         "axes.spines.right": False,
@@ -69,21 +69,40 @@ def save_bundle(fig: plt.Figure, base: Path) -> None:
     plt.close(fig)
 
 
-def km_curve(time: np.ndarray, event: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def km_curve(time: np.ndarray, event: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Kaplan-Meier with Greenwood log-log 95% confidence limits.
+
+    Ties include all observations at a time in its risk set before event/censor
+    removal. This is cross-checked against survival::survfit(conf.type='log-log').
+    """
     order = np.argsort(time)
     time, event = time[order], event[order]
     event_times = np.unique(time[event == 1])
     survival = 1.0
-    xs, ys = [0.0], [1.0]
+    xs, ys, lows, highs = [0.0], [1.0], [1.0], [1.0]
+    greenwood = 0.0
+    z = float(norm.ppf(0.975))
     for value in event_times:
         at_risk = np.sum(time >= value)
         events = np.sum((time == value) & (event == 1))
-        xs.extend([float(value), float(value)])
-        ys.extend([survival, survival * (1 - events / at_risk)])
-        survival = ys[-1]
+        survival *= 1 - events / at_risk
+        if events < at_risk:
+            greenwood += events / (at_risk * (at_risk - events))
+        if survival <= 0:
+            low, high = 0.0, 0.0
+        elif survival >= 1:
+            low, high = 1.0, 1.0
+        else:
+            loglog = np.log(-np.log(survival))
+            se_loglog = np.sqrt(greenwood) / abs(np.log(survival))
+            low = float(np.exp(-np.exp(loglog + z * se_loglog)))
+            high = float(np.exp(-np.exp(loglog - z * se_loglog)))
+        xs.append(float(value)); ys.append(survival)
+        lows.append(low); highs.append(high)
     xs.append(float(np.max(time)))
     ys.append(survival)
-    return np.asarray(xs), np.asarray(ys)
+    lows.append(lows[-1]); highs.append(highs[-1])
+    return np.asarray(xs), np.asarray(ys), np.asarray(lows), np.asarray(highs)
 
 
 def logrank_p(frame: pd.DataFrame, time_col: str, event_col: str, group_col: str) -> float:
@@ -121,28 +140,59 @@ def logrank_p(frame: pd.DataFrame, time_col: str, event_col: str, group_col: str
 
 def draw_km(
     ax: plt.Axes,
+    risk_ax: plt.Axes,
     frame: pd.DataFrame,
     time_col: str,
     event_col: str,
     group_col: str,
     title: str,
-) -> float:
-    for group, colour in [("High", TEAL), ("Low", GREY)]:
+) -> tuple[float, list[dict], list[dict], list[dict]]:
+    max_years = float(frame[time_col].max()) / 365.25
+    step_years = 2 if max_years <= 10 else 5
+    ticks = np.arange(0, max_years + 1e-8, step_years)
+    km_audit_rows, censor_audit_rows, risk_audit_rows = [], [], []
+    for group_index, (group, colour) in enumerate([("High", TEAL), ("Low", GREY)]):
         subset = frame.loc[frame[group_col] == group]
-        x, survival = km_curve(
-            subset[time_col].to_numpy(float) / 365.25,
-            subset[event_col].to_numpy(int),
+        time = subset[time_col].to_numpy(float) / 365.25
+        event = subset[event_col].to_numpy(int)
+        x, survival, low, high = km_curve(
+            time, event,
         )
+        ax.fill_between(x, low, high, step="post", color=colour, alpha=0.12, linewidth=0)
         ax.step(x, survival, where="post", color=colour, lw=1.4, label=f"{group} (n={len(subset)})")
+        censor_times = time[event == 0]
+        censor_survival = survival[np.maximum(np.searchsorted(x, censor_times, side="right") - 1, 0)]
+        ax.scatter(censor_times, censor_survival, marker="+", s=10, linewidths=0.55, color=colour)
+        for value, probability, lower, upper in zip(x, survival, low, high):
+            km_audit_rows.append({"endpoint": title, "group": group, "time_years": value,
+                "survival": probability, "ci95_low": lower, "ci95_high": upper})
+        for value, probability in zip(censor_times, censor_survival):
+            censor_audit_rows.append({"endpoint": title, "group": group,
+                "time_years": value, "survival_at_censor": probability})
+        for value in ticks:
+            n_risk = int(np.sum(time >= value))
+            risk_ax.text(value, 1 - group_index, str(n_risk), color=colour, ha="center", va="center", fontsize=6.6)
+            risk_audit_rows.append({"endpoint": title, "group": group, "time_years": value, "n_at_risk": n_risk})
+        risk_ax.text(-0.055, 1 - group_index, group, transform=risk_ax.get_yaxis_transform(),
+            color=colour, ha="right", va="center", fontsize=6.6)
     p_value = logrank_p(frame, time_col, event_col, group_col)
-    ax.set_xlim(left=0)
+    ax.set_xlim(0, max_years * 1.02)
+    ax.set_xticks(ticks)
     ax.set_ylim(0, 1.03)
-    ax.set_xlabel("Time (years)")
+    ax.set_xlabel("")
     ax.set_ylabel("Survival probability")
     ax.set_title(title, loc="left", fontweight="bold")
-    ax.text(0.98, 0.97, f"Log-rank P = {p_value:.3f}", transform=ax.transAxes, ha="right", va="top", fontsize=5.8)
+    ax.text(0.98, 0.97, f"Log-rank P = {p_value:.3f}", transform=ax.transAxes, ha="right", va="top", fontsize=6.6)
     ax.legend(loc="lower left")
-    return p_value
+    risk_ax.set_xlim(ax.get_xlim())
+    risk_ax.set_xticks(ticks)
+    risk_ax.set_ylim(-0.6, 2.0)
+    risk_ax.set_yticks([])
+    risk_ax.tick_params(axis="x", length=0, labelbottom=False)
+    for spine in risk_ax.spines.values(): spine.set_visible(False)
+    risk_ax.text(0, 1.70, "Number at risk", fontsize=6.6, va="center")
+    risk_ax.set_xlabel("Time (years)", labelpad=0.5)
+    return p_value, km_audit_rows, censor_audit_rows, risk_audit_rows
 
 
 def build_figure1(project: Path, output_dir: Path) -> dict[str, object]:
@@ -162,18 +212,16 @@ def build_figure1(project: Path, output_dir: Path) -> dict[str, object]:
     data = associations.loc[associations["gene"] != "IFI44L"].copy()
     data["mlog10fdr"] = -np.log10(data["fdr_bh"].clip(lower=np.finfo(float).tiny))
     significant = data["fdr_bh"] < 0.05
-    highlighted = significant & (data["beta_per_IFI44L_SD"].abs() >= 0.585)
     ax_a.scatter(data.loc[~significant, "beta_per_IFI44L_SD"], data.loc[~significant, "mlog10fdr"], s=4, color=LIGHT_GREY, alpha=0.45, linewidth=0)
-    ax_a.scatter(data.loc[significant & ~highlighted, "beta_per_IFI44L_SD"], data.loc[significant & ~highlighted, "mlog10fdr"], s=5, color=BLUE_LIGHT, alpha=0.55, linewidth=0)
-    ax_a.scatter(data.loc[highlighted, "beta_per_IFI44L_SD"], data.loc[highlighted, "mlog10fdr"], s=8, color=BLUE, alpha=0.8, linewidth=0)
-    for gene, position in {"CMPK2": (0.80, 73.0), "OAS2": (1.34, 69.0), "IFIT1": (1.39, 63.0)}.items():
+    ax_a.scatter(data.loc[significant, "beta_per_IFI44L_SD"], data.loc[significant, "mlog10fdr"], s=5, color=BLUE, alpha=0.7, linewidth=0)
+    for gene, offset in {"CMPK2": (-23, 18), "OAS2": (10, 10), "IFIT1": (19, -8)}.items():
         row = data.loc[data["gene"] == gene]
         if len(row):
             x, y = row.iloc[0][["beta_per_IFI44L_SD", "mlog10fdr"]]
-            ax_a.annotate(gene, (x, y), xytext=position, textcoords="data", fontsize=5.2, color=BLACK, ha="center", va="center", arrowprops={"arrowstyle": "-", "lw": 0.35, "color": GREY, "shrinkA": 4, "shrinkB": 3})
+            ax_a.annotate(gene, (x, y), xytext=offset, textcoords="offset points", fontsize=6.6, color=BLACK, ha="center", va="center", arrowprops={"arrowstyle": "-", "lw": 0.35, "color": GREY, "shrinkA": 4, "shrinkB": 3})
     ax_a.axhline(-np.log10(0.05), color=GREY, lw=0.7, ls="--")
     ax_a.axvline(0, color=GREY, lw=0.6)
-    ax_a.set_xlabel("Expression change per IFI44L s.d.")
+    ax_a.set_xlabel("Expression coefficient per IFI44L s.d.\n(archived units)")
     ax_a.set_ylabel("-log10 FDR")
     ax_a.set_title("Continuous transcriptome associations", loc="left", fontweight="bold")
     panel_label(ax_a, "a", x=-0.19)
@@ -236,7 +284,8 @@ def build_figure1(project: Path, output_dir: Path) -> dict[str, object]:
 
     base = output_dir / "Figure1"
     save_bundle(fig, base)
-    return {"figure": "Figure 1", "base": str(base), "cohort": "TCGA receptor-defined TNBC", "n": 187, "panels": ["a", "b", "c", "d"]}
+    return {"figure": "Figure 1", "base": str(base), "cohort": "TCGA receptor-defined TNBC",
+            "n": int(immune["n"].iloc[0]), "panels": ["a", "b", "c", "d"]}
 
 
 def build_figure2(project: Path, output_dir: Path) -> dict[str, object]:
@@ -249,14 +298,16 @@ def build_figure2(project: Path, output_dir: Path) -> dict[str, object]:
     tcga_cox = pd.read_csv(bulk / "TCGA_TNBC_continuous_IFI44L_Cox.tsv", sep="\t")
     tcga_clinical = pd.read_csv(bulk / "TCGA_TNBC_survival_merged.tsv", sep="\t")
 
-    fig = plt.figure(figsize=(7.2, 8.4), constrained_layout=True)
-    grid = fig.add_gridspec(3, 2, height_ratios=[1.15, 1.0, 1.0])
+    fig = plt.figure(figsize=(7.2, 8.0), constrained_layout=True)
+    grid = fig.add_gridspec(3, 2, height_ratios=[1.0, 1.22, 1.22])
     ax_a = fig.add_subplot(grid[0, 0])
     ax_b = fig.add_subplot(grid[0, 1])
-    ax_c = fig.add_subplot(grid[1, 0])
-    ax_d = fig.add_subplot(grid[1, 1])
-    ax_e = fig.add_subplot(grid[2, 0])
-    ax_f = fig.add_subplot(grid[2, 1])
+    curve_axes, risk_axes = [], []
+    for row, col in [(1, 0), (1, 1), (2, 0), (2, 1)]:
+        nested = grid[row, col].subgridspec(2, 1, height_ratios=[4.0, 1.0], hspace=0.02)
+        curve_axes.append(fig.add_subplot(nested[0, 0]))
+        risk_axes.append(fig.add_subplot(nested[1, 0]))
+    ax_c, ax_d, ax_e, ax_f = curve_axes
 
     order = [
         "IFN_ALPHA_RESPONSE", "IFN_GAMMA_RESPONSE", "ANTIGEN_PRESENTATION", "CHECKPOINT_AXIS",
@@ -271,8 +322,8 @@ def build_figure2(project: Path, output_dir: Path) -> dict[str, object]:
     y = np.arange(len(order))[::-1]
     for yi, first, second in zip(y, t, g):
         ax_a.plot([first, second], [yi, yi], color=LIGHT_GREY, lw=1.2)
-    ax_a.scatter(t, y, s=24, color=BLUE, label="TCGA (n=187)")
-    ax_a.scatter(g, y, s=24, color=TEAL, marker="s", label="GSE58812 (n=107)")
+    ax_a.scatter(t, y, s=24, color=BLUE, label=f"TCGA (n={int(tcga_cor['n'].iloc[0])})")
+    ax_a.scatter(g, y, s=24, color=TEAL, marker="s", label=f"GSE58812 (n={int(gse_cor['n'].iloc[0])})")
     ax_a.axvline(0, color=GREY, lw=0.7)
     ax_a.set_yticks(y, labels)
     ax_a.set_xlim(-0.4, 1.0)
@@ -324,18 +375,25 @@ def build_figure2(project: Path, output_dir: Path) -> dict[str, object]:
     ax_b.set_xlim(0.35, 1.60)
     ax_b.set_xticks([0.4, 0.6, 0.8, 1.0, 1.4], ["0.4", "0.6", "0.8", "1.0", "1.4"])
     ax_b.set_yticks(y_positions, label_order)
+    ax_b.set_ylim(-0.95, 3.35)
     ax_b.set_xlabel("Hazard ratio per IFI44L s.d. (95% CI)")
     ax_b.set_title("Continuous survival models", loc="left", fontweight="bold")
     ax_b.legend(handles=[
         Line2D([0], [0], marker="o", color="none", markerfacecolor=BLACK, markersize=4.5, label="Unadjusted"),
         Line2D([0], [0], marker="s", color="none", markerfacecolor=BLACK, markersize=4.5, label="Adjusted sensitivity"),
-    ], loc="lower left")
+    ], loc="lower left", fontsize=6.6, borderpad=0.2)
     panel_label(ax_b, "b", x=-0.28)
 
-    gse_mfs_p = draw_km(ax_c, gse_clinical, "mfs_days", "metastasis_event", "IFI44L_group", "GSE58812 MFS")
-    gse_os_p = draw_km(ax_d, gse_clinical, "os_days", "death_event", "IFI44L_group", "GSE58812 OS")
-    tcga_os_p = draw_km(ax_e, tcga_clinical, "OS_days", "OS_event", "median_group", "TCGA OS")
-    tcga_pfi_p = draw_km(ax_f, tcga_clinical, "PFI_days", "PFI_event", "median_group", "TCGA PFI")
+    km_results = [
+        draw_km(ax_c, risk_axes[0], gse_clinical, "mfs_days", "metastasis_event", "IFI44L_group", "GSE58812 MFS"),
+        draw_km(ax_d, risk_axes[1], gse_clinical, "os_days", "death_event", "IFI44L_group", "GSE58812 OS"),
+        draw_km(ax_e, risk_axes[2], tcga_clinical, "OS_days", "OS_event", "median_group", "TCGA OS"),
+        draw_km(ax_f, risk_axes[3], tcga_clinical, "PFI_days", "PFI_event", "median_group", "TCGA PFI"),
+    ]
+    gse_mfs_p, gse_os_p, tcga_os_p, tcga_pfi_p = [result[0] for result in km_results]
+    for index, name in [(1, "KM_confidence"), (2, "KM_censoring"), (3, "KM_risk_counts")]:
+        pd.DataFrame([row for result in km_results for row in result[index]]).to_csv(
+            output_dir / f"Figure2_{name}.tsv", sep="\t", index=False)
     panel_label(ax_c, "c", x=-0.20)
     panel_label(ax_d, "d", x=-0.20)
     panel_label(ax_e, "e", x=-0.20)
@@ -347,9 +405,12 @@ def build_figure2(project: Path, output_dir: Path) -> dict[str, object]:
         "figure": "Figure 2",
         "base": str(base),
         "panels": ["a", "b", "c", "d", "e", "f"],
-        "GSE58812": {"n": 107, "MFS_events": 31, "OS_events": 29, "MFS_logrank_p": gse_mfs_p, "OS_logrank_p": gse_os_p},
-        "TCGA": {"n": 187, "OS_events": 24, "PFI_events": 30, "OS_logrank_p": tcga_os_p, "PFI_logrank_p": tcga_pfi_p},
+        "GSE58812": {"n": len(gse_clinical), "MFS_events": int(gse_clinical["metastasis_event"].sum()),
+            "OS_events": int(gse_clinical["death_event"].sum()), "MFS_logrank_p": gse_mfs_p, "OS_logrank_p": gse_os_p},
+        "TCGA": {"n": len(tcga_clinical), "OS_events": int(tcga_clinical["OS_event"].sum()),
+            "PFI_events": int(tcga_clinical["PFI_event"].sum()), "OS_logrank_p": tcga_os_p, "PFI_logrank_p": tcga_pfi_p},
         "primary_inference": "continuous Cox models; median-split curves are graphical sensitivity analyses",
+        "KM_confidence": "Greenwood log-log 95% confidence intervals; censor marks and risk counts shown",
     }
 
 
@@ -371,7 +432,7 @@ def add_box(
     )
     ax.add_patch(patch)
     ax.text(x + width / 2, y + height - 0.055, title, ha="center", va="top", fontsize=7.2, fontweight="bold", color=edge)
-    ax.text(x + 0.024, y + height - 0.135, "\n".join(lines), ha="left", va="top", fontsize=6.05, linespacing=1.35, color=BLACK)
+    ax.text(x + 0.024, y + height - 0.135, "\n".join(lines), ha="left", va="top", fontsize=6.6, linespacing=1.35, color=BLACK)
 
 
 def build_figure5(output_dir: Path) -> dict[str, object]:
@@ -391,10 +452,10 @@ def build_figure5(output_dir: Path) -> dict[str, object]:
     add_box(ax, (0.71, 0.57), 0.25, 0.27, "Spatial niches", [
         "focal IFI44L aggregation", "within multicellular IFN-", "and immune-enriched", "Visium neighbourhoods"
     ], TEAL, PALE_TEAL)
-    add_box(ax, (0.18, 0.17), 0.27, 0.24, "Outcome context", [
-        "favourable association in", "GSE58812; directionally similar", "but non-significant OS/PFI", "estimates in TCGA"
+    add_box(ax, (0.18, 0.15), 0.27, 0.26, "Outcome context", [
+        "cohort-specific survival", "estimates are interpreted with", "event counts and available", "clinical covariates"
     ], BLUE, PALE_BLUE)
-    add_box(ax, (0.55, 0.17), 0.27, 0.24, "Evidence boundary", [
+    add_box(ax, (0.55, 0.15), 0.27, 0.26, "Evidence boundary", [
         "tissue-state marker, not", "a causal mechanism, independent", "prognostic biomarker or", "immunotherapy predictor"
     ], GREY, PALE_GREY)
 
@@ -408,8 +469,8 @@ def build_figure5(output_dir: Path) -> dict[str, object]:
         ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-|>", mutation_scale=9, linewidth=1.0, color=colour))
     ax.text(
         0.50, 0.06,
-        "Interpretation: whole-tumour IFI44L is best read as a compartment-dependent IFN-inflamed niche marker; prognostic effects remain cohort-dependent.",
-        ha="center", va="bottom", fontsize=6.5, fontweight="bold",
+        "Interpretation: IFI44L marks a compartment-dependent IFN-inflamed tissue state; outcome associations require further validation.",
+        ha="center", va="bottom", fontsize=6.6, fontweight="bold",
     )
 
     base = output_dir / "Figure5_public_multiomics_conceptual_synthesis"
@@ -436,7 +497,7 @@ def main() -> None:
     copied = []
     for number, source_name in [
         (3, "Figure3_single_cell_compartment"),
-        (4, "Figure4_spatial_IFI44L_ecology_quantitative"),
+        (4, "Figure4_spatial_IFI44L_ecology"),
     ]:
         for suffix in [".pdf", ".png", ".svg", ".tiff"]:
             source = source_dir / f"{source_name}{suffix}"

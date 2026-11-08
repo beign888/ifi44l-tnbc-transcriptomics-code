@@ -22,7 +22,6 @@ PYTHON_PACKAGES = {
     "openpyxl": "openpyxl",
     "pandas": "pandas",
     "Pillow": "pillow",
-    "PyMuPDF": "pymupdf",
     "scanpy": "scanpy",
     "scipy": "scipy",
     "seaborn": "seaborn",
@@ -70,10 +69,12 @@ def main() -> None:
     project = args.project.resolve()
     raw_root = (args.raw_root or project.parent).resolve()
 
+    expression_input = raw_root / "数据/差异富集分析/3 差异分析/symbol.BRCA.txt"
+    if not expression_input.exists():
+        expression_input = project / "source_metadata/TCGA_frozen/TCGA_BRCA_TNBC_frozen.tsv.gz"
     inputs = [
-        (raw_root / "数据/差异富集分析/3 差异分析/symbol.BRCA.txt", True),
-        (raw_root / "数据/差异富集分析/3 差异分析/三阴.txt", True),
-        (raw_root / "数据/差异富集分析/1 乳腺癌分型/3_乳腺癌分型.xlsx", True),
+        (expression_input, True),
+        (project / "source_metadata/TCGA_clinical/brca_tcga_clinical_patient.txt", True),
         (project / "source_metadata/GSE58812/GSE58812_series_matrix.txt.gz", True),
         (project / "source_metadata/Wu2021_NatGenet_Supplementary_Tables.xlsx", True),
         (project / "source_metadata/GSE176078_Wu2021_CELLxGENE_2025-11-08.h5ad", True),
@@ -83,12 +84,15 @@ def main() -> None:
     input_records = [file_record(path, required, args.deep_hash) for path, required in inputs]
 
     spatial_files = project / "source_metadata/spatial/GSE210616/files"
+    def visible_files(pattern: str) -> list[Path]:
+        return [p for p in spatial_files.glob(pattern)
+                if not p.name.startswith("._") and p.name != ".DS_Store"]
     spatial_counts = {
         "sample_directories": len([p for p in spatial_files.glob("GSM*") if p.is_dir()]),
-        "matrix_h5": len(list(spatial_files.glob("GSM*/*_filtered_feature_bc_matrix.h5"))),
-        "positions": len(list(spatial_files.glob("GSM*/*_tissue_positions_list.csv.gz"))),
-        "images": len(list(spatial_files.glob("GSM*/*_tissue_hires_image.png.gz"))),
-        "scalefactors": len(list(spatial_files.glob("GSM*/*_scalefactors_json.json.gz"))),
+        "matrix_h5": len(visible_files("GSM*/*_filtered_feature_bc_matrix.h5")),
+        "positions": len(visible_files("GSM*/*_tissue_positions_list.csv.gz")),
+        "images": len(visible_files("GSM*/*_tissue_hires_image.png.gz")),
+        "scalefactors": len(visible_files("GSM*/*_scalefactors_json.json.gz")),
     }
 
     python_versions = {"python": platform.python_version()}
@@ -136,7 +140,7 @@ def main() -> None:
 
     missing_inputs = [r["path"] for r in input_records if r["required"] and not r["exists"]]
     missing_python = [k for k, v in python_versions.items() if k != "python" and v is None]
-    missing_r = [k for k, v in r_versions.items() if k not in {"Rscript", "R", "error"} and v is None]
+    missing_r = [name for name in R_PACKAGES if r_versions.get(name) is None]
     spatial_ready = all(value == 28 for value in spatial_counts.values())
     report = {
         "project": str(project),
@@ -149,7 +153,7 @@ def main() -> None:
         "status": {
             "inputs_ready": not missing_inputs and spatial_ready,
             "python_ready": not missing_python,
-            "r_ready": bool(rscript) and not missing_r,
+            "r_ready": bool(rscript) and "error" not in r_versions and "R" in r_versions and not missing_r,
             "outputs_present": all(r["exists"] for r in output_records),
             "missing_inputs": missing_inputs,
             "missing_python_packages": missing_python,

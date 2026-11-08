@@ -28,11 +28,17 @@ figure_dir <- file.path(project_dir, "figures", "validation_GSE58812")
 log_dir <- file.path(project_dir, "logs")
 dir.create(result_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(figure_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
 if (!file.exists(source_file)) stop("Missing downloaded GSE58812 series matrix: ", source_file)
 gse <- getGEO(filename = source_file, getGPL = FALSE)
 probe_expr <- exprs(gse)
 clinical <- as.data.table(pData(gse), keep.rownames = "sample_id")
+fwrite(data.table(
+  original_field = names(clinical),
+  nonmissing_n = vapply(clinical, function(x) sum(!is.na(x) & nzchar(as.character(x))), integer(1)),
+  source = "GSE58812 GEO series matrix pData"
+), file.path(result_dir, "GSE58812_clinical_field_availability.tsv"), sep = "\t")
 
 num <- function(x) suppressWarnings(as.numeric(as.character(x)))
 clinical[, `:=`(
@@ -42,6 +48,10 @@ clinical[, `:=`(
   death_event = num(`death:ch1`),
   os_days = num(`os (days):ch1`)
 )]
+if (!all(clinical$metastasis_event %in% c(0, 1)) ||
+    !all(clinical$death_event %in% c(0, 1))) stop("Unexpected GSE58812 survival-event coding")
+if (any(!is.finite(clinical$mfs_days) | clinical$mfs_days <= 0) ||
+    any(!is.finite(clinical$os_days) | clinical$os_days <= 0)) stop("Invalid GSE58812 survival time")
 
 # MAS5 values are on a linear intensity scale in this series matrix.
 expr_log2 <- log2(pmax(probe_expr, 0) + 1)
@@ -101,6 +111,15 @@ cox_results <- rbindlist(list(
 ))
 cox_results[, fdr_bh := p.adjust(p_value, method = "BH")]
 fwrite(cox_results, file.path(result_dir, "GSE58812_continuous_IFI44L_Cox.tsv"), sep = "\t")
+model_definitions <- copy(cox_results[, .(endpoint, model, n, events)])
+model_definitions[, `:=`(
+  predictor = "IFI44L gene-level log2(MAS5+1) expression standardized using sample SD across 107 patients",
+  adjustment = ifelse(model == "Age-adjusted", "patient age standardized using sample SD", "none"),
+  tie_method = "Efron", PH_diagnostic = "Schoenfeld residual test (survival::cox.zph)",
+  group_rule = "median split for graphical sensitivity only; High >= median, Low < median",
+  unavailable_covariates = "patient-level tumour size; nodal status; TNM stage; histological grade absent from deposited series matrix"
+)]
+fwrite(model_definitions, file.path(result_dir, "GSE58812_Cox_model_definitions.tsv"), sep = "\t")
 
 # Reuse the predeclared signatures, excluding IFI44L from every score to prevent
 # circular self-correlation.
@@ -108,6 +127,13 @@ sig_def <- fread(file.path(project_dir, "results", "bulk", "immune_signature_def
 signature_list <- split(sig_def[present == TRUE & gene != "IFI44L", gene], sig_def[present == TRUE & gene != "IFI44L", signature])
 signature_list <- lapply(signature_list, intersect, y = rownames(gene_expr))
 signature_list <- signature_list[lengths(signature_list) >= 2]
+gse_signature_members <- copy(sig_def)
+gse_signature_members[, `:=`(
+  present_in_GSE58812 = gene %in% rownames(gene_expr),
+  used_in_GSE58812 = gene != "IFI44L" & present == TRUE & gene %in% rownames(gene_expr)
+)]
+fwrite(gse_signature_members,
+       file.path(result_dir, "GSE58812_immune_signature_definitions.tsv"), sep = "\t")
 gsva_param <- ssgseaParam(exprData = gene_expr, geneSets = signature_list, normalize = TRUE)
 scores <- gsva(gsva_param, verbose = FALSE)
 fwrite(as.data.table(t(scores), keep.rownames = "sample_id"),
