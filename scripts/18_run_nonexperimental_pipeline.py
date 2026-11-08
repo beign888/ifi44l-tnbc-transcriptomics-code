@@ -63,6 +63,8 @@ def main() -> None:
              "--project", str(project), "--raw-root", str(raw_root)], raw_root),
             ("02_tcga_bulk", [rscript, str(scripts / "01_bulk_tnbc_reanalysis.R"),
              "--project", str(project), "--raw-root", str(raw_root)], raw_root),
+            ("02b_tcga_survival", [rscript, str(scripts / "06_tcga_tnbc_survival.R"),
+             str(project)], raw_root),
             ("03_gse58812", [rscript, str(scripts / "05_gse58812_validation.R"),
              "--project", str(project)], raw_root),
             ("04_wu_supplement", [str(python), str(scripts / "03_parse_wu2021_supplement.py"),
@@ -72,13 +74,6 @@ def main() -> None:
             ("05_gse210616_spatial", [str(python), str(scripts / "09_gse210616_spatial_analysis.py"),
              "--project", str(project), "--data-dir", str(source / "spatial/GSE210616"),
              "--permutations", str(args.permutations)], raw_root),
-            ("06_gse169246_metadata", [str(python), str(scripts / "11_prepare_gse169246_metadata.py"),
-             "--barcodes", str(source / "single_cell/GSE169246/GSE169246_TNBC_RNA.barcode.tsv.gz"),
-             "--clinical", str(source / "single_cell/GSE169246/Zhang2021_CancerCell_mmc2.xlsx"),
-             "--output-dir", str(results / "single_cell/GSE169246")], raw_root),
-            ("07_gse169246_targets", [str(python), str(scripts / "13_gse169246_targeted_analysis.py"),
-             "--project", str(project), "--source-dir", str(source / "single_cell/GSE169246"),
-             "--prepare-targets-only"], raw_root),
         ]
         if args.run_census_audit:
             analysis_steps.insert(
@@ -89,40 +84,13 @@ def main() -> None:
         for name, command, cwd in analysis_steps:
             run_step(name, command, cwd, log_dir, env)
 
-        extractor = project / "bin/extract_targeted_mtx"
-        extractor.parent.mkdir(parents=True, exist_ok=True)
-        compile_command = [shutil.which("cc") or "cc", "-O3", str(scripts / "12_extract_targeted_mtx.c"),
-                           "-lz", "-o", str(extractor)]
-        run_step("08_compile_extractor", compile_command, raw_root, log_dir, env)
-        run_step("09_extract_gse169246", [str(extractor),
-                 str(source / "single_cell/GSE169246/GSE169246_TNBC_RNA.counts.mtx.gz"),
-                 str(results / "single_cell/GSE169246/target_rows.tsv"),
-                 str(results / "single_cell/GSE169246/library_sizes_u64.bin"),
-                 str(results / "single_cell/GSE169246/target_counts_u32.bin")], raw_root, log_dir, env)
-        run_step("10_gse169246_analysis", [str(python), str(scripts / "13_gse169246_targeted_analysis.py"),
-                 "--project", str(project), "--source-dir", str(source / "single_cell/GSE169246")],
-                 raw_root, log_dir, env)
-
     if args.stage in {"figures", "all", "public-analyses"}:
         for name, script in [
             ("11_figures_single_cell_spatial", "14_make_nature_style_figures.py"),
-            ("12_figures_bulk_validation", "15_make_bulk_validation_figures_v7.py"),
-            ("13_figure_spatial_final", "16_make_spatial_main_figure.py"),
+            ("12_figure_spatial_final", "16_make_spatial_main_figure.py"),
+            ("13_figures_v11_public_multiomics", "15_make_bulk_validation_figures_v11.py"),
         ]:
             run_step(name, [str(python), str(scripts / script), "--project", str(project)], raw_root, log_dir, env)
-        run_step(
-            "14_figure5_working_model",
-            [
-                str(python),
-                str(scripts / "31_make_bcr_v7_figure5.py"),
-                "--project", str(project),
-                "--output-dir", str(project / "figures" / "manuscript_nature_style"),
-                "--version", "public_code_v1.0.0",
-            ],
-            raw_root,
-            log_dir,
-            env,
-        )
 
     run_step("99_final_preflight", preflight + ["--require-outputs"], raw_root, log_dir, env)
     print(f"Reproduction complete. Logs: {log_dir}")

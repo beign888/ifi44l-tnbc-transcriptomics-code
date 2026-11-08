@@ -4,6 +4,7 @@ data.table	1.17.0	CRAN
 ggplot2	3.5.1	CRAN
 survival	3.8-3	CRAN
 survminer	0.5.0	CRAN
+readxl	1.4.5	CRAN
 limma	3.58.1	Bioconductor 3.18
 GSVA	1.50.5	Bioconductor 3.18
 clusterProfiler	4.10.1	Bioconductor 3.18

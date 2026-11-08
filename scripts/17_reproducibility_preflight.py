@@ -32,7 +32,7 @@ PYTHON_PACKAGES = {
 
 R_PACKAGES = [
     "data.table", "limma", "GSVA", "ggplot2", "clusterProfiler", "org.Hs.eg.db",
-    "GEOquery", "Biobase", "AnnotationDbi", "hgu133plus2.db", "survival", "survminer",
+    "GEOquery", "Biobase", "AnnotationDbi", "hgu133plus2.db", "survival", "survminer", "readxl",
 ]
 
 
@@ -78,10 +78,7 @@ def main() -> None:
         (project / "source_metadata/Wu2021_NatGenet_Supplementary_Tables.xlsx", True),
         (project / "source_metadata/GSE176078_Wu2021_CELLxGENE_2025-11-08.h5ad", True),
         (project / "source_metadata/spatial/GSE210616/GSE210616_primary28_samples.tsv", True),
-        (project / "source_metadata/single_cell/GSE169246/GSE169246_TNBC_RNA.barcode.tsv.gz", True),
-        (project / "source_metadata/single_cell/GSE169246/GSE169246_TNBC_RNA.feature.tsv.gz", True),
-        (project / "source_metadata/single_cell/GSE169246/GSE169246_TNBC_RNA.counts.mtx.gz", True),
-        (project / "source_metadata/single_cell/GSE169246/Zhang2021_CancerCell_mmc2.xlsx", True),
+        (project / "source_metadata/TCGA_CDR/TCGA-CDR-SupplementalTableS1.xlsx", True),
     ]
     input_records = [file_record(path, required, args.deep_hash) for path, required in inputs]
 
@@ -123,15 +120,17 @@ def main() -> None:
         project / "results/bulk/TCGA_TNBC_definition_audit.tsv",
         project / "results/bulk/TCGA_TNBC_sample_definition_manifest.tsv",
         project / "results/bulk/continuous_IFI44L_gene_associations.tsv",
+        project / "results/bulk/TCGA_TNBC_continuous_IFI44L_Cox.tsv",
+        project / "results/bulk/TCGA_TNBC_median_split_logrank_sensitivity.tsv",
+        project / "results/bulk/TCGA_TNBC_survival_audit.tsv",
         project / "results/validation_GSE58812/GSE58812_continuous_IFI44L_Cox.tsv",
         project / "results/single_cell/GSE176078_TNBC_IFI44L_celltype_major_summary.tsv",
         project / "results/spatial/GSE210616/patient_level_signature_tests.tsv",
-        project / "results/single_cell/GSE169246/GSE169246_antiPDL1_baseline_response_tests.tsv",
-        project / "figures/manuscript_nature_style/Figure1_TCGA_IFI44L_inflammatory_state.pdf",
-        project / "figures/manuscript_nature_style/Figure2_GSE58812_replication_survival.pdf",
-        project / "figures/manuscript_nature_style/Figure3_single_cell_compartment.pdf",
-        project / "figures/manuscript_nature_style/Figure4_spatial_IFI44L_ecology.pdf",
-        project / "figures/manuscript_nature_style/Figure5_compartment_dependent_model_no_local_human_cohort.pdf",
+        project / "figures/v11_public_multiomics/Figure1.pdf",
+        project / "figures/v11_public_multiomics/Figure2_cross_cohort_replication_survival.pdf",
+        project / "figures/v11_public_multiomics/Figure3.pdf",
+        project / "figures/v11_public_multiomics/Figure4.pdf",
+        project / "figures/v11_public_multiomics/Figure5_public_multiomics_conceptual_synthesis.pdf",
     ]
     output_records = [file_record(path, True, args.deep_hash) for path in expected_outputs]
 

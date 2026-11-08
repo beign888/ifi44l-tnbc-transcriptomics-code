@@ -1,7 +1,7 @@
 # Licence status
 
-No open-source or other reuse licence has been assigned to this repository at this stage.
+The repository code in the v1.1.0 snapshot is released under the MIT License, following the project owner's approval on 8 November 2026. The full terms are in `LICENSE`.
 
-The files are made publicly visible to support transparent peer review and reproducibility assessment. Public visibility does not grant permission to copy, modify, redistribute, sublicense or incorporate the code into another work beyond rights that may independently exist under applicable law.
+This licence applies to the code and original repository documentation. It does not relicense third-party datasets, articles, images or software dependencies. Those materials remain subject to their original access conditions and licences and are not bundled as source datasets in this repository.
 
-A formal licence may be added only after the final authorship and rights-holder record has been confirmed. No MIT, GPL, Apache or other licence should be inferred from repository visibility.
+The collective copyright label identifies code contributors without assigning manuscript authorship. Final manuscript authorship and contributions remain separate author decisions.

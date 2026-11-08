@@ -1,18 +1,19 @@
 # IFI44L in triple-negative breast cancer: reproducibility code
 
-Version: `v1.0.0` manuscript code snapshot (2 November 2026)
+Version: `v1.1.0` public-multiomics manuscript code snapshot (8 November 2026)
 
-This repository contains the analysis code used for a compartment-aware study of IFI44L in triple-negative breast cancer (TNBC). It covers receptor-defined TCGA-BRCA bulk transcriptomics, GSE58812 survival validation, GSE176078 single-cell RNA sequencing, GSE210616 10x Visium spatial transcriptomics and an explicitly exploratory GSE169246 treatment-cohort analysis.
+This repository contains the analysis code used for a compartment-aware study of IFI44L in triple-negative breast cancer (TNBC). It covers receptor-defined TCGA-BRCA bulk transcriptomics, TCGA overall-survival (OS) and progression-free-interval (PFI) analyses, GSE58812 survival validation, GSE176078 single-cell RNA sequencing and GSE210616 10x Visium spatial transcriptomics.
 
-The repository intentionally contains no author list, contribution statement, local patient material, immunohistochemistry, identifiable information, third-party raw data, cell-line experimental measurements or manuscript source. Public data must be retrieved from the original repositories. Cell-line source data and uncropped blots are supplied separately with the journal submission, not here.
+The repository intentionally contains no author list, contribution statement, local patient material, immunohistochemistry, identifiable information, third-party raw data, cell-line measurements, immunoblots or manuscript source. Public inputs must be retrieved from the original repositories.
 
 ## Scientific boundary
 
-- The inferential unit is the tumour, patient, donor or independent biological experiment, as appropriate—not an individual cell, Visium spot, technical well or image field.
+- The inferential unit is the tumour, patient or donor—not an individual cell or Visium spot.
 - IFI44L is excluded from every expression signature tested for correlation with IFI44L.
 - Visium spots are treated as multicellular spatial niches, not single cells.
-- GSE169246 is an underpowered exploratory analysis and is not evidence for or against an immunotherapy-predictive biomarker.
-- Archived western blots are qualitative siRNA-screening documentation only; no cell-line-specific or quantitative immunoblot inference is made.
+- Continuous standardized IFI44L is the primary survival predictor; median groups are used only for graphical sensitivity analyses.
+- TCGA OS/PFI results are retained regardless of significance. The directionally favourable but non-significant TCGA estimates do not establish an independent prognostic biomarker.
+- The conceptual synthesis is descriptive and does not assert a causal pathway or immunotherapy-predictive utility.
 
 ## Repository layout
 
@@ -23,14 +24,15 @@ The repository intentionally contains no author list, contribution statement, lo
 ├── PUBLIC_DATA_ACCESS.md    accessions and input staging notes
 ├── SOURCE_DATA_MAP.tsv      figure-to-source-to-script map
 ├── FILE_MANIFEST_SHA256.tsv repository integrity manifest
-└── LICENSE_STATUS.md        current reuse-rights status
+├── LICENSE                  MIT License for the repository code
+└── LICENSE_STATUS.md        licence scope and third-party exclusions
 ```
 
-Runtime-created directories (`source_metadata/`, `results/`, `figures/`, `logs/` and `bin/`) are excluded from version control.
+Runtime-created directories (`source_metadata/`, `results/`, `figures/` and `logs/`) are excluded from version control.
 
 ## Software environment
 
-Python 3.11 or later, R 4.3, a C compiler and zlib are required. The recorded package versions are in `environment/`.
+Python 3.11 or later and R 4.3 are required. The recorded package versions are in `environment/`.
 
 ```bash
 python3 -m venv .venv
@@ -56,21 +58,26 @@ RAW_ROOT/
 
 REPOSITORY_ROOT/
 └── source_metadata/
+    ├── TCGA_CDR/TCGA-CDR-SupplementalTableS1.xlsx
     ├── GSE58812/GSE58812_series_matrix.txt.gz
     ├── Wu2021_NatGenet_Supplementary_Tables.xlsx
     ├── GSE176078_Wu2021_CELLxGENE_2025-11-08.h5ad
-    ├── spatial/GSE210616/
-    │   ├── GSE210616_family.soft.gz
-    │   ├── GSE210616_primary28_samples.tsv
-    │   └── files/GSM*/...
-    └── single_cell/GSE169246/
-        ├── GSE169246_TNBC_RNA.barcode.tsv.gz
-        ├── GSE169246_TNBC_RNA.feature.tsv.gz
-        ├── GSE169246_TNBC_RNA.counts.mtx.gz
-        └── Zhang2021_CancerCell_mmc2.xlsx
+    └── spatial/GSE210616/
+        ├── GSE210616_family.soft.gz
+        ├── GSE210616_primary28_samples.tsv
+        └── files/GSM*/...
 ```
 
-The three TCGA helper files are frozen inputs used by the submitted analysis. They are not included in this code-only repository. The sample-level receptor-definition audit is performed by `21_audit_tcga_tnbc_definition.py` before modelling.
+The three TCGA expression/receptor helper files are frozen inputs used by the submitted analysis and are not included here. They reconstruct an archived ER-negative, PR-negative and HER2-negative intersection; they are not a PAM50 basal-like surrogate. `21_audit_tcga_tnbc_definition.py` checks the exact intersection and expression-matrix match before modelling.
+
+Download the TCGA Clinical Data Resource from the official GDC file endpoint:
+
+```bash
+mkdir -p source_metadata/TCGA_CDR
+curl --fail --location \
+  --output source_metadata/TCGA_CDR/TCGA-CDR-SupplementalTableS1.xlsx \
+  https://api.gdc.cancer.gov/data/1b5f413e-a8d1-4d10-92eb-7c4ae739ed81
+```
 
 Prepare the 28 primary GSE210616 sections from the GEO SOFT record, optionally downloading their files:
 
@@ -83,7 +90,7 @@ python scripts/08_prepare_gse210616_spatial.py \
 
 ## Reproduction commands
 
-Run the preflight first. It reports missing inputs and packages without fabricating replacements.
+Run the non-destructive preflight first:
 
 ```bash
 python scripts/17_reproducibility_preflight.py \
@@ -92,7 +99,7 @@ python scripts/17_reproducibility_preflight.py \
   --deep-hash
 ```
 
-Run the public-data analyses and main figures:
+Run all public-data analyses and Figures 1–5:
 
 ```bash
 python scripts/18_run_nonexperimental_pipeline.py \
@@ -102,13 +109,11 @@ python scripts/18_run_nonexperimental_pipeline.py \
   --permutations 499
 ```
 
-Add `--run-census-audit` only when network access to the frozen CELLxGENE Census version is available. Logs are written to `logs/reproduction/`. The pipeline stops at the first failed step and finishes by rerunning the preflight against the expected outputs.
-
-The optional `36_make_supplementary_figures_v8.py` script is included for auditability but is not part of the public-data pipeline because its cell-line measurements and image assets are supplied separately with the manuscript.
+Add `--run-census-audit` only when network access to the frozen CELLxGENE Census version is available. Logs are written to `logs/reproduction/`. The pipeline stops at the first failed step and finishes by rerunning the preflight against expected outputs.
 
 ## Validation status
 
-The public snapshot was checked for Python syntax, R parseability, C compilation, forbidden local paths, author/contact information, secrets and internal-manifest consistency. These checks establish code-package integrity only. They do not substitute for a full numerical rerun from independently downloaded raw data or for scientific peer review. See `VALIDATION_REPORT.md`.
+The v1.1.0 snapshot was checked for Python syntax, R parseability, required-input declarations, forbidden local paths, author/contact information, secrets and internal-manifest consistency. The TCGA OS/PFI script and revised public-multiomics Figures 1, 2 and 5 were executed against the preserved public-data workspace. These checks establish a bounded local validation, not an independent numerical rerun from newly downloaded inputs or scientific peer review. See `VALIDATION_REPORT.md`.
 
 ## Citation and authorship
 
@@ -116,4 +121,4 @@ Citation metadata and author attribution are intentionally deferred until the fi
 
 ## Licence
 
-No reuse licence has yet been assigned. See `LICENSE_STATUS.md` before copying, modifying or redistributing the code.
+The repository code is released under the MIT License; see `LICENSE`. The licence does not cover third-party datasets, publications or software dependencies, which remain subject to their own terms. See `LICENSE_STATUS.md` for the scope.

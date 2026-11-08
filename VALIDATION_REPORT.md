@@ -1,27 +1,32 @@
 # Public code snapshot validation report
 
-Validation date: 2 November 2026
+Validation date: 8 November 2026
 
-Snapshot: `v1.0.0`
+Snapshot: `v1.1.0`
 
 ## Checks completed
 
 | Check | Result | Scope |
 |---|---|---|
-| Python syntax compilation | PASS | All 16 Python scripts |
-| Python command-line entry points | PASS | `--help` executed for all 16 scripts in the recorded project virtual environment |
-| R syntax parsing | PASS | Two analysis scripts plus the R package installer |
-| C compilation | PASS | `12_extract_targeted_mtx.c` compiled with zlib |
-| Input and environment preflight against the preserved local project | PASS | All declared source inputs present; 28/28 spatial sections complete; declared Python and R packages available |
-| Existing expected-output inventory | PARTIAL | 11 of 12 public-pipeline output paths already present; the remaining Figure 5 path reflects a renamed public-snapshot output |
-| Figure 5 public-snapshot build | PASS | PDF, SVG, PNG, TIFF and contract JSON generated successfully in an isolated temporary directory |
+| Python syntax compilation | PASS | All Python scripts |
+| R syntax parsing | PASS | Analysis scripts and the R package installer |
+| TCGA-CDR file integrity | PASS | MD5 `a4591b2dcee39591f59e5e25a6ce75fa` in preserved workspace |
+| TCGA OS/PFI join | PASS | 187 expression samples mapped to 187 unique patients |
+| TCGA survival models | PASS | OS 24 events; PFI 30 events; unadjusted and age-adjusted continuous models |
+| Revised Figure 2 build | PASS | GSE58812 and TCGA survival results displayed together, including non-significant TCGA estimates |
+| Revised Figure 5 build | PASS | Public-multiomics descriptive synthesis; no local or cell-line branch |
+| Input and environment preflight against preserved workspace | PASS | Declared public inputs and required packages available |
 | Author/contact information scan | PASS | No deferred author names, contribution statement or correspondence email detected |
-| Local-path scan | PASS | No local absolute filesystem path or T7 volume path detected |
+| Local-path scan | PASS | No local absolute filesystem path or removable-volume path detected |
 | Common secret-pattern scan | PASS | No password, API-key, token or private-key pattern detected |
 | Redistribution boundary | PASS | No third-party raw data, local patient/IHC material, cell-line measurements or manuscript source included |
 
+## Numerical result boundary
+
+TCGA continuous IFI44L estimates were directionally favourable but non-significant: OS unadjusted HR 0.829 (95% CI 0.546–1.259; P=0.378), OS age-adjusted HR 0.835 (0.554–1.259; P=0.389), PFI unadjusted HR 0.839 (0.582–1.209; P=0.346), and PFI age-adjusted HR 0.837 (0.579–1.211; P=0.346). Median-split curves are graphical sensitivity analyses only.
+
+Pathologic-stage adjustment was not promoted because stage-I OS events were absent and stage-I PFI events were sparse. The analysis therefore does not claim independent prognostic value.
+
 ## Interpretation boundary
 
-These checks establish static executability, input/environment availability on the preserved development machine and code-package privacy/integrity. They are not a complete independent numerical rerun from newly downloaded public data. The full pipeline is designed to stop on missing inputs or failed steps and to rerun its output preflight at completion.
-
-The existing-project preflight reported one absent path because the public snapshot writes the conceptual model as `Figure5_compartment_dependent_model_no_local_human_cohort.pdf`, whereas the preserved working project used an earlier filename. The public Figure 5 builder was therefore executed separately in an isolated directory and completed successfully; no scientific output in the preserved working project was overwritten.
+These checks establish static executability and a bounded local rerun against preserved public inputs. They do not constitute a fully independent numerical reproduction from newly downloaded source files, scientific peer review, clinical validation or submission readiness.
