@@ -1,8 +1,8 @@
-# v1.2.0 validation status
+# v1.2.1 validation status
 
-Status recorded: 9 November 2026. The previous v1.1.0/187-sample validation statements are superseded. This report separates completed bounded numerical replays from later non-inferential edits and release-level checks.
+Status recorded: 9 November 2026. The previous v1.1.0/187-sample validation statements are superseded. Core numerical validation below is inherited from the v1.2.0 snapshot. The newly added documented-processing sensitivity has its own independent execution receipts. These scopes do not constitute a fresh end-to-end execution of the complete v1.2.1 runner.
 
-## Completed checks with retained evidence
+## Inherited v1.2.0 core checks with retained evidence
 
 | Check | Result | Exact scope |
 |---|---|---|
@@ -20,12 +20,33 @@ The bulk receipt records `full_bulk_execution_snapshot_sha256` as `cc67fef20ef71
 
 Other retained author-audit receipts are `SC_spatial_replay_comparison.json` and `KM_python_R_crosscheck.json`. The numerical replay environment used Python 3.12.13 with preserved packages including numpy 2.5.2, pandas 2.3.3 and scanpy 1.12.1. Exact R session information and package records accompany the analysis logs/environment files. These checks used preserved public inputs, not independent reacquisition and processing of raw sequencing.
 
-## Final local code checks
+## New documented TCGA processing-sensitivity checks
 
-All Python scripts passed AST parsing and all R scripts passed `parse()`. The final analysis preflight passed input availability, Python/R package availability, all expected outputs and 28 complete spatial sample directories. PyMuPDF is not imported by the analysis or figure scripts and is not a mandatory analysis preflight dependency; optional PDF auditing used pypdf/reportlab separately. All five final PDFs passed the recorded technical figure audit after numerical replay. Public-content scanning found no local patient/IHC material or personal workstation paths in the released files. The SHA-256 manifest is regenerated from this sealed snapshot.
+The sensitivity uses the same clinically selected 151 patients with UCSC Xena `TCGA.BRCA.sampleMap/HiSeqV2`, version `2017-10-13`, documented as `log2(norm_count+1)` from RSEM normalized results. It is an exploratory expression-processing check, not an independent patient cohort, raw-read reprocessing or recovery of the archived primary input's provenance. Core algorithms and results from scripts 01–21 are unchanged; the v1.2.1 runner adds an optional sensitivity call.
 
-The accompanying manuscript and release receipt identify the immutable public commit after remote-tree verification; this file does not embed a circular hash of its own commit. Spreadsheet/document rendering and package-level integrity are separate editorial checks. Earlier v1.1.0 checks do not establish validation for changed files.
+| Check | Result | Exact scope |
+|---|---|---|
+| Documented source identity | PASS | Complete matrix 64,286,337 bytes; SHA-256 `263bf67245cc4b9062676583c0ff0306f08471a26aafd5504037e1da22133746`. Producer, units, version and source URL are retained in the supplied metadata and acquisition audit. |
+| Exact all-gene subset | PASS | 20,530 gene rows and 151 exact matching primary-tumour barcodes in frozen clinical order; no duplicated gene rows. Subset 8,251,822 bytes, SHA-256 `53d57d8013a86933143964d7ffd68d4247f1bf8737c0c2ce5238e97c2a9a85f8`. All 3,100,030 selected source decimal strings matched exactly; preparation adds no transformation. See `SELFCONTAINED_SUBSET_PROVENANCE.json`. |
+| Complete-source R execution | PASS: exit 0 | Script executed against the complete documented matrix, reading the same 151 selected columns. The design SHA-256 is `94cdd944420b61f1e7af5897823923b5c2f8028199ea20e8aee2f31cf6c85e25`; executed R source SHA-256 is `aed08837d6e266849e5c7bf8ba3c7bee5547012cf77b88a3ce6a9ff342a1026a`. Two earlier pre-scoring failed attempts and their logs are retained; neither is represented as a successful run. |
+| Standalone subset R execution | PASS: exit 0 | Separately executed against the supplied subset and four local baseline files, without another project directory or the complete source matrix. Ten result TSVs matched the complete-source execution byte for byte. |
+| Independent correlation and multiplicity calculation | PASS | Python/SciPy recalculation verified all 13 two-sided Spearman correlations and BH values at `rtol=1e-10`, `atol=1e-14`. Archived matched-151 correlations also matched the original baseline results. |
+| Module coverage and analysis boundary | PASS: explicitly reported | Original 13 module definitions, with IFI44L excluded; original ssGSEA settings retained. One missing member, TRAC, leaves 7/8 CD8 T-cell genes; IFN-alpha response retains 19/19. No GSEA, survival, treatment-response or adjusted checkpoint model was run by this sensitivity. |
+
+The ten byte-identical TSVs are `Archived_matched151_IFI44L_module_correlations.tsv`, `HiSeqV2_IFI44L_matched151.tsv`, `HiSeqV2_IFI44L_module_correlations.tsv`, `HiSeqV2_missing_or_ambiguous_samples.tsv`, `HiSeqV2_module_gene_coverage.tsv`, `HiSeqV2_sample_mapping.tsv`, `HiSeqV2_ssGSEA_scores_wide.tsv`, `IFI44L_cross_processing_rank_concordance.tsv`, `PROCESSING_SENSITIVITY_MODEL_AUDIT.tsv` and `Processing_sensitivity_module_comparison.tsv`. The source-universe table `HiSeqV2_source_samples_not_selected.tsv` intentionally differs between the complete source and its selected subset and is excluded from this equality claim. Session information is a runtime record, not one of the ten compared TSVs.
+
+The documented input retained the IFI44L–IFN-alpha-response association (Spearman rho `0.925576856047403`, BH FDR `1.2696970614743201e-63`, n=151). The epithelial module was near zero (rho `0.0061310561171139`, P and FDR `0.940442015950876`); its negligible sign change prevents a claim that all 13 directions were identical. IFI44L sample ranks across archived and documented representations were concordant (rho `0.997110491460439`, n=151). These are sensitivity observations on overlapping patients, not a new prognostic or causal validation.
+
+The retained receipt is `PROCESSING_SENSITIVITY_VALIDATION.json`, status `PASS_BOUNDED_PROCESSING_SENSITIVITY`. The separate source and subset SHA values must not be substituted for the archived main-input SHA. Documentation of another representation does not identify the archived input's normalization.
+
+## Inherited local code checks and v1.2.1 release boundary
+
+For the inherited v1.2.0 core snapshot, all Python scripts passed AST parsing and all R scripts passed `parse()`. The analysis preflight passed input availability, Python/R package availability, all expected outputs and 28 complete spatial sample directories. PyMuPDF is not imported by the analysis or figure scripts and is not a mandatory analysis preflight dependency; optional PDF auditing used pypdf/reportlab separately. All five final PDFs passed the recorded technical figure audit after numerical replay. Public-content scanning found no local patient/IHC material or personal workstation paths in that snapshot.
+
+Those receipts do not establish execution of a newly installed v1.2.1 environment or a new `--stage all --run-processing-sensitivity` run. The new R sensitivity itself was executed as documented above; the optional runner integration, static checks, release manifest and remote-tree verification are separate release checks. Use the final release receipt for their actual completion status. Regenerate `FILE_MANIFEST_SHA256.tsv` only after the v1.2.1 files are sealed.
+
+The final manuscript and release receipt must identify the same immutable public commit after remote-tree verification; this file does not assert that a new commit has already been published or embed a circular hash of its own commit. Spreadsheet/document rendering and package-level integrity are separate editorial checks. Earlier version checks do not establish validation for changed files.
 
 ## Interpretation boundary
 
-Upstream expression release, normalization and units are unavailable in the archived records. Exact decimal preservation makes downstream calculations auditable but does not recover that provenance or establish a log2 scale. Module scores do not measure cell abundance or tumour purity; Visium does not establish single-cell co-expression. A numerical replay does not establish clinical utility, independent prognostic performance, causal mechanism, author approval, scientific peer review or submission readiness.
+Upstream expression release, normalization and units remain unavailable for the archived main input. Exact decimal preservation makes downstream calculations auditable but does not recover that provenance or establish its log2 scale. The separate Xena input has documented processing and units, but uses the same patients and does not retrospectively resolve the main input's origin. Module scores do not measure cell abundance or tumour purity; Visium does not establish single-cell co-expression. A numerical replay does not establish clinical utility, independent prognostic performance, causal mechanism, author approval, scientific peer review or submission readiness.

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
+import hashlib
+import json
 from pathlib import Path
 import os
 import shutil
@@ -29,11 +31,17 @@ def main() -> None:
     parser.add_argument("--python", type=Path)
     parser.add_argument("--permutations", type=int, default=499)
     parser.add_argument(
+        "--run-processing-sensitivity", action="store_true",
+        help="Also reproduce the documented HiSeqV2 processing check from Additional file 5.",
+    )
+    parser.add_argument(
         "--run-census-audit",
         action="store_true",
         help="Also query the frozen CELLxGENE Census version used for the metadata audit.",
     )
     args = parser.parse_args()
+    if args.run_processing_sensitivity and args.stage == "figures":
+        parser.error("Processing sensitivity requires preflight, public-analyses or all stage")
     project = args.project.resolve()
     raw_root = (args.raw_root or project.parent).resolve()
     # Preserve a virtual-environment interpreter symlink. Path.resolve() would
@@ -47,6 +55,19 @@ def main() -> None:
     env = os.environ.copy()
     env["MPLCONFIGDIR"] = str(project / ".matplotlib-cache")
     Path(env["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
+
+    sensitivity_work = source / "TCGA_documented_processing"
+    if args.run_processing_sensitivity:
+        provenance_path = sensitivity_work / "SELFCONTAINED_SUBSET_PROVENANCE.json"
+        if not provenance_path.is_file():
+            raise FileNotFoundError("Stage the TCGA_processing_sensitivity folder from Additional file 5 at " + str(sensitivity_work))
+        provenance = json.loads(provenance_path.read_text())
+        subset_path = sensitivity_work / provenance["subset_file"]
+        if hashlib.sha256(subset_path.read_bytes()).hexdigest() != provenance["subset_sha256"]:
+            raise RuntimeError("Documented-processing input differs from the supplied SHA-256")
+        for name, expected in provenance["baseline_files"].items():
+            if hashlib.sha256((sensitivity_work / name).read_bytes()).hexdigest() != expected["sha256"]:
+                raise RuntimeError("Processing-sensitivity baseline input differs: " + name)
 
     original_matrix = raw_root / "数据/差异富集分析/3 差异分析/symbol.BRCA.txt"
     frozen_matrix = source / "TCGA_frozen/TCGA_BRCA_TNBC_frozen.tsv.gz"
@@ -89,6 +110,12 @@ def main() -> None:
             )
         for name, command, cwd in analysis_steps:
             run_step(name, command, cwd, log_dir, env)
+        if args.run_processing_sensitivity:
+            run_step("06_documented_processing_sensitivity", [
+                rscript, str(scripts / "22_documented_tcga_processing_sensitivity.R"),
+                "--work-dir", str(sensitivity_work),
+                "--output-dir", str(results / "processing_sensitivity"),
+            ], raw_root, log_dir, env)
 
     if args.stage in {"figures", "all", "public-analyses"}:
         for name, script in [
