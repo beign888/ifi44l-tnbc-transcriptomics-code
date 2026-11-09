@@ -7,6 +7,8 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(clusterProfiler)
   library(org.Hs.eg.db)
+  library(digest)
+  library(jsonlite)
 })
 
 set.seed(20260831)
@@ -20,11 +22,7 @@ argument_value <- function(flag, default = NULL) {
 }
 
 project_dir <- normalizePath(argument_value("--project", "."), mustWork = TRUE)
-raw_root <- normalizePath(
-  argument_value("--raw-root", dirname(project_dir)),
-  mustWork = FALSE
-)
-input_dir <- file.path(raw_root, "数据", "差异富集分析", "3 差异分析")
+documented_dir <- file.path(project_dir, "source_metadata", "TCGA_documented_primary")
 result_dir <- file.path(project_dir, "results", "bulk")
 figure_dir <- file.path(project_dir, "figures", "bulk")
 log_dir <- file.path(project_dir, "logs")
@@ -32,20 +30,34 @@ dir.create(result_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(figure_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
+source_receipt_file <- argument_value("--source-receipt", file.path(documented_dir, "TCGA_documented_input_provenance.json"))
+if (!file.exists(source_receipt_file)) stop("Missing documented-source receipt; run 24_prepare_documented_tcga_input.py or restore the supplied documented input bundle")
+provenance <- fromJSON(source_receipt_file)
+expected_source_sha256 <- "263bf67245cc4b9062676583c0ff0306f08471a26aafd5504037e1da22133746"
+if (!identical(provenance$source_matrix_sha256, expected_source_sha256) ||
+    !identical(provenance$units, "log2(RSEM normalized count + 1)")) stop("Documented expression source or units mismatch")
+header_file <- file.path(documented_dir, provenance$full_header_file)
+if (!file.exists(header_file) || !identical(digest(file = header_file, algo = "sha256"), provenance$full_header_sha256)) stop("Documented full-header SHA-256 mismatch")
+clinical_file <- file.path(project_dir, "source_metadata", "TCGA_clinical", "brca_tcga_clinical_patient.txt")
+if (!file.exists(clinical_file) || !identical(digest(file = clinical_file, algo = "sha256"), provenance$clinical_source_sha256)) stop("Clinical source SHA-256 mismatch")
 matrix_file <- argument_value("--expression-matrix", NULL)
 if (is.null(matrix_file)) {
-  archived_matrix <- file.path(input_dir, "symbol.BRCA.txt")
-  frozen_matrix <- file.path(project_dir, "source_metadata", "TCGA_frozen", "TCGA_BRCA_TNBC_frozen.tsv.gz")
-  matrix_file <- if (file.exists(archived_matrix)) archived_matrix else frozen_matrix
+  subset_file <- file.path(documented_dir, provenance$subset_file)
+  full_file <- file.path(documented_dir, provenance$source_matrix_file)
+  matrix_file <- if (file.exists(subset_file)) subset_file else full_file
 }
-if (!file.exists(matrix_file)) stop("Missing expression matrix; restore the frozen public TCGA subset or specify --expression-matrix")
+if (!file.exists(matrix_file)) stop("Missing documented expression matrix; archived matrices are not a fallback")
+observed_matrix_sha256 <- digest(file = matrix_file, algo = "sha256")
+if (!observed_matrix_sha256 %in% c(provenance$source_matrix_sha256, provenance$subset_sha256)) stop("Supplied matrix does not match the documented full matrix or exact subset")
 manifest_file <- file.path(result_dir, "TCGA_TNBC_sample_definition_manifest.tsv")
 if (!file.exists(manifest_file)) stop("Run 21_audit_tcga_tnbc_definition.py first to generate the clinically verified TNBC manifest")
-manifest <- fread(manifest_file)
+manifest <- fread(manifest_file, colClasses = c(sample_type_code = "character"))
 if (!all(c("sample_id", "included_in_analysis") %in% names(manifest))) stop("TNBC definition-manifest schema mismatch")
 is_included <- tolower(as.character(manifest$included_in_analysis)) %in% c("true", "1")
 tnbc_requested <- unique(as.character(manifest$sample_id[is_included]))
 if (!length(tnbc_requested) || anyDuplicated(tnbc_requested)) stop("Empty or duplicated TNBC inclusion list")
+if (!all(manifest$sample_type_code[is_included] == "01") ||
+    anyDuplicated(manifest$patient_id[is_included])) stop("Analysis manifest must contain one type01 sample per patient")
 
 message("[1/8] Reading header and matching the TNBC sample list")
 header <- names(fread(matrix_file, nrows = 0, check.names = FALSE))
@@ -83,13 +95,16 @@ stopifnot("IFI44L" %in% rownames(expr), ncol(expr) == length(tnbc_samples))
 response_expr <- expr[rownames(expr) != "IFI44L", , drop = FALSE]
 input_audit <- data.table(
   metric = c("source_matrix_basename", "analysed_samples", "retained_variable_genes",
-             "response_genes_excluding_IFI44L", "archived_expression_min", "archived_expression_q25",
-             "archived_expression_median", "archived_expression_q75", "archived_expression_max",
-             "expression_units", "additional_transformation_applied", "upstream_release_and_normalization"),
+             "response_genes_excluding_IFI44L", "documented_expression_min", "documented_expression_q25",
+             "documented_expression_median", "documented_expression_q75", "documented_expression_max",
+             "expression_units", "additional_transformation_applied", "upstream_release_and_normalization",
+             "source_matrix_sha256", "analysed_matrix_sha256", "source_receipt_sha256", "full_source_columns"),
   value = c(basename(matrix_file), ncol(expr), nrow(expr), nrow(response_expr),
             min(expr), quantile(expr, .25), median(expr), quantile(expr, .75), max(expr),
-            "archived expression units; not established as log2 fold-change units",
-            "none; archived matrix values used as supplied", "not recoverable from archived source metadata")
+            provenance$units, "none; supplied log2 RSEM values used directly; no additional log or count normalization",
+            "UCSC Xena TCGA.BRCA.sampleMap/HiSeqV2; 2017-10-13; UNC Level3 RSEM normalized_results",
+            provenance$source_matrix_sha256, observed_matrix_sha256,
+            digest(file = source_receipt_file, algo = "sha256"), provenance$full_header_samples)
 )
 fwrite(input_audit, file.path(result_dir, "TCGA_TNBC_expression_input_audit.tsv"), sep = "\t")
 
@@ -195,6 +210,13 @@ if (length(unresolved_ids)) {
   )
   go_tab <- rbindlist(list(go_tab, unresolved), use.names = TRUE, fill = TRUE)
 }
+# Count every eligible pathway in the primary multiplicity family. An unresolved
+# p-value remains NA, but cannot reduce the BH denominator for estimable tests.
+go_tab[, backend_p_adjust := p.adjust]
+go_tab[, p.adjust := NA_real_]
+bh_family_size <- nrow(go_tab)
+estimable_pathways <- is.finite(go_tab$pvalue)
+go_tab[estimable_pathways, p.adjust := stats::p.adjust(pvalue, method = "BH", n = bh_family_size)]
 fwrite(go_tab, file.path(result_dir, "GSEA_GO_BP_all.tsv"), sep = "\t")
 fwrite(go_tab[!is.finite(NES) | !is.finite(pvalue) | !is.finite(p.adjust)],
        file.path(result_dir, "GSEA_GO_BP_unresolved.tsv"), sep = "\t")
@@ -202,10 +224,12 @@ writeLines(if (length(gsea_warnings)) gsea_warnings else "No fgsea warnings repo
            file.path(result_dir, "GSEA_GO_BP_warnings.txt"))
 fwrite(data.table(
   metric = c("all_pathway_rows", "rows_with_finite_NES_and_adjusted_p", "unresolved_pathway_rows",
-             "BH_FDR05_pathways", "warnings_count"),
+             "BH_FDR05_pathways", "warnings_count", "BH_family_size", "BH_policy", "qvalue_role"),
   value = c(nrow(go_tab), sum(is.finite(go_tab$NES) & is.finite(go_tab$p.adjust)),
             sum(!is.finite(go_tab$NES) | !is.finite(go_tab$pvalue) | !is.finite(go_tab$p.adjust)),
-            sum(go_tab$p.adjust < 0.05, na.rm = TRUE), length(gsea_warnings))
+            sum(go_tab$p.adjust < 0.05, na.rm = TRUE), length(gsea_warnings), bh_family_size,
+            "BH denominator includes every eligible pathway; unresolved p-values remain NA",
+            "backend qvalue retained for transparency; primary multiplicity result is full-family BH p.adjust")
 ), file.path(result_dir, "GSEA_GO_BP_test_audit.tsv"), sep = "\t")
 if (nrow(go_tab)) {
   fwrite(go_tab[p.adjust < 0.05], file.path(result_dir, "GSEA_GO_BP_FDR05.tsv"), sep = "\t")
@@ -365,7 +389,7 @@ p1 <- ggplot(volcano, aes(expression_difference_high_minus_low, neglog10_fdr, co
   geom_point(size = 0.7, alpha = 0.55) +
   scale_color_manual(values = c(Higher = "#B2182B", Lower = "#2166AC", `Not significant` = "grey75")) +
   geom_hline(yintercept = -log10(0.05), linetype = 2, linewidth = 0.35) +
-  labs(x = "Expression difference: high minus low (archived units)", y = expression(-log[10](BH-FDR)), color = NULL) +
+  labs(x = "Expression difference: high minus low (log2 RSEM units)", y = expression(-log[10](BH-FDR)), color = NULL) +
   theme_classic(base_size = 11)
 ggsave(file.path(figure_dir, "bulk_median_group_volcano.pdf"), p1, width = 6.2, height = 5.2)
 ggsave(file.path(figure_dir, "bulk_median_group_volcano.png"), p1, width = 6.2, height = 5.2, dpi = 400)

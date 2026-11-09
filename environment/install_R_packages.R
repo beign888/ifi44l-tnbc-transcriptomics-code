@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-cran_packages <- c("data.table", "ggplot2", "survival", "survminer", "readxl")
+cran_packages <- c("data.table", "ggplot2", "survival", "survminer", "readxl", "digest", "jsonlite", "statmod")
 bioconductor_packages <- c(
   "limma", "GSVA", "clusterProfiler", "org.Hs.eg.db", "GEOquery",
   "Biobase", "AnnotationDbi", "hgu133plus2.db"

@@ -31,7 +31,7 @@ PYTHON_PACKAGES = {
 
 R_PACKAGES = [
     "data.table", "limma", "GSVA", "ggplot2", "clusterProfiler", "org.Hs.eg.db",
-    "GEOquery", "Biobase", "AnnotationDbi", "hgu133plus2.db", "survival", "survminer", "readxl",
+    "GEOquery", "Biobase", "AnnotationDbi", "hgu133plus2.db", "survival", "survminer", "readxl", "digest", "jsonlite",
 ]
 
 
@@ -69,11 +69,38 @@ def main() -> None:
     project = args.project.resolve()
     raw_root = (args.raw_root or project.parent).resolve()
 
-    expression_input = raw_root / "数据/差异富集分析/3 差异分析/symbol.BRCA.txt"
-    if not expression_input.exists():
-        expression_input = project / "source_metadata/TCGA_frozen/TCGA_BRCA_TNBC_frozen.tsv.gz"
+    documented = project / "source_metadata/TCGA_documented_primary"
+    expression_input = documented / "TCGA_BRCA_documented_primary_subset.tsv.gz"
+    provenance_path = documented / "TCGA_documented_input_provenance.json"
+    provenance_checks = {}
+    if provenance_path.is_file():
+        provenance = json.loads(provenance_path.read_text())
+        for label, path, key in [
+            ("subset", expression_input, "subset_sha256"),
+            ("full_header", documented / provenance["full_header_file"], "full_header_sha256"),
+            ("clinical", project / "source_metadata/TCGA_clinical/brca_tcga_clinical_patient.txt", "clinical_source_sha256"),
+            ("source_metadata", documented / provenance["metadata_file"], "metadata_sha256"),
+        ]:
+            provenance_checks[label] = path.is_file() and sha256(path) == provenance[key]
+    else:
+        provenance_checks["receipt_present"] = False
+    gse_work = project / "source_metadata/GSE21653"
+    gse_provenance_path = gse_work / "GSE21653_frozen_input_provenance.json"
+    if gse_provenance_path.is_file():
+        gse_provenance = json.loads(gse_provenance_path.read_text())
+        for label, filename, key in [
+            ("GSE21653_subset", gse_provenance["subset_file"], "subset_sha256"),
+            ("GSE21653_metadata", "GSE21653_all266_metadata.tsv", "all266_metadata_sha256"),
+            ("GSE21653_modules", "baseline_module_definitions.tsv", "module_definitions_sha256"),
+        ]:
+            path = gse_work / filename
+            provenance_checks[label] = path.is_file() and sha256(path) == gse_provenance[key]
+    else:
+        provenance_checks["GSE21653_receipt_present"] = False
     inputs = [
         (expression_input, True),
+        (provenance_path, True),
+        (gse_provenance_path, True),
         (project / "source_metadata/TCGA_clinical/brca_tcga_clinical_patient.txt", True),
         (project / "source_metadata/GSE58812/GSE58812_series_matrix.txt.gz", True),
         (project / "source_metadata/Wu2021_NatGenet_Supplementary_Tables.xlsx", True),
@@ -127,14 +154,21 @@ def main() -> None:
         project / "results/bulk/TCGA_TNBC_continuous_IFI44L_Cox.tsv",
         project / "results/bulk/TCGA_TNBC_median_split_logrank_sensitivity.tsv",
         project / "results/bulk/TCGA_TNBC_survival_audit.tsv",
+        project / "results/bulk/TCGA_TNBC_stage_adjusted_IFI44L_Cox.tsv",
+        project / "results/external_checkpoint/GSE58812/GSE58812_checkpoint_exploratory_partial_correlations.tsv",
+        project / "results/external_checkpoint/GSE21653/GSE21653_checkpoint_exploratory_partial_correlations.tsv",
         project / "results/validation_GSE58812/GSE58812_continuous_IFI44L_Cox.tsv",
+        project / "results/validation_GSE21653/GSE21653_continuous_IFI44L_Cox.tsv",
         project / "results/single_cell/GSE176078_TNBC_IFI44L_celltype_major_summary.tsv",
         project / "results/spatial/GSE210616/patient_level_signature_tests.tsv",
+        project / "results/spatial/GSE210616/robustness/patient_median_bootstrap_CI_summary.tsv",
         project / "figures/v11_public_multiomics/Figure1.pdf",
         project / "figures/v11_public_multiomics/Figure2_cross_cohort_replication_survival.pdf",
         project / "figures/v11_public_multiomics/Figure3.pdf",
         project / "figures/v11_public_multiomics/Figure4.pdf",
         project / "figures/v11_public_multiomics/Figure5_public_multiomics_conceptual_synthesis.pdf",
+        project / "figures/v15_supplementary/Supplementary_Figure_S1_GSE21653_validation.pdf",
+        project / "sensitivity/strict_IHC/results/bulk/TCGA_TNBC_continuous_IFI44L_Cox.tsv",
     ]
     output_records = [file_record(path, True, args.deep_hash) for path in expected_outputs]
 
@@ -146,12 +180,13 @@ def main() -> None:
         "project": str(project),
         "raw_root": str(raw_root),
         "inputs": input_records,
+        "documented_TCGA_provenance_checks": provenance_checks,
         "spatial_expected_28_each": spatial_counts,
         "python_versions": python_versions,
         "r_versions": r_versions,
         "expected_outputs": output_records,
         "status": {
-            "inputs_ready": not missing_inputs and spatial_ready,
+            "inputs_ready": not missing_inputs and spatial_ready and bool(provenance_checks) and all(provenance_checks.values()),
             "python_ready": not missing_python,
             "r_ready": bool(rscript) and "error" not in r_versions and "R" in r_versions and not missing_r,
             "outputs_present": all(r["exists"] for r in output_records),

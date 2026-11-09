@@ -31,17 +31,11 @@ def main() -> None:
     parser.add_argument("--python", type=Path)
     parser.add_argument("--permutations", type=int, default=499)
     parser.add_argument(
-        "--run-processing-sensitivity", action="store_true",
-        help="Also reproduce the documented HiSeqV2 processing check from Additional file 5.",
-    )
-    parser.add_argument(
         "--run-census-audit",
         action="store_true",
         help="Also query the frozen CELLxGENE Census version used for the metadata audit.",
     )
     args = parser.parse_args()
-    if args.run_processing_sensitivity and args.stage == "figures":
-        parser.error("Processing sensitivity requires preflight, public-analyses or all stage")
     project = args.project.resolve()
     raw_root = (args.raw_root or project.parent).resolve()
     # Preserve a virtual-environment interpreter symlink. Path.resolve() would
@@ -56,24 +50,9 @@ def main() -> None:
     env["MPLCONFIGDIR"] = str(project / ".matplotlib-cache")
     Path(env["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
 
-    sensitivity_work = source / "TCGA_documented_processing"
-    if args.run_processing_sensitivity:
-        provenance_path = sensitivity_work / "SELFCONTAINED_SUBSET_PROVENANCE.json"
-        if not provenance_path.is_file():
-            raise FileNotFoundError("Stage the TCGA_processing_sensitivity folder from Additional file 5 at " + str(sensitivity_work))
-        provenance = json.loads(provenance_path.read_text())
-        subset_path = sensitivity_work / provenance["subset_file"]
-        if hashlib.sha256(subset_path.read_bytes()).hexdigest() != provenance["subset_sha256"]:
-            raise RuntimeError("Documented-processing input differs from the supplied SHA-256")
-        for name, expected in provenance["baseline_files"].items():
-            if hashlib.sha256((sensitivity_work / name).read_bytes()).hexdigest() != expected["sha256"]:
-                raise RuntimeError("Processing-sensitivity baseline input differs: " + name)
-
-    original_matrix = raw_root / "数据/差异富集分析/3 差异分析/symbol.BRCA.txt"
-    frozen_matrix = source / "TCGA_frozen/TCGA_BRCA_TNBC_frozen.tsv.gz"
-    if not original_matrix.exists() and not frozen_matrix.exists():
-        run_step("00_restore_frozen_tcga", [str(python), str(scripts / "00_restore_frozen_tcga_input.py"),
-                 "--project", str(project)], raw_root, log_dir, env)
+    provenance_path = source / "TCGA_documented_primary/TCGA_documented_input_provenance.json"
+    if not provenance_path.is_file():
+        raise FileNotFoundError("Stage Additional file 3 into source_metadata before running the pipeline; undocumented archived expression matrices are not accepted.")
 
     preflight = [str(python), str(scripts / "17_reproducibility_preflight.py"),
                  "--project", str(project), "--raw-root", str(raw_root)]
@@ -87,13 +66,27 @@ def main() -> None:
             raise RuntimeError("Rscript is unavailable")
         analysis_steps = [
             ("01_tcga_definition_audit", [str(python), str(scripts / "21_audit_tcga_tnbc_definition.py"),
-             "--project", str(project), "--raw-root", str(raw_root)], raw_root),
+             "--project", str(project)], raw_root),
             ("02_tcga_bulk", [rscript, str(scripts / "01_bulk_tnbc_reanalysis.R"),
              "--project", str(project), "--raw-root", str(raw_root)], raw_root),
             ("02b_tcga_survival", [rscript, str(scripts / "06_tcga_tnbc_survival.R"),
              str(project)], raw_root),
+            ("02c_tcga_stage_sensitivity", [rscript, str(scripts / "29_tcga_stage_sensitivity.R"),
+             "--project", str(project)], raw_root),
             ("03_gse58812", [rscript, str(scripts / "05_gse58812_validation.R"),
              "--project", str(project)], raw_root),
+            ("03b_gse21653", [rscript, str(scripts / "25_gse21653_validation.R"),
+             "--project", str(project)], raw_root),
+            ("03c_GSE58812_checkpoint_context", [rscript, str(scripts / "28_external_checkpoint_partial.R"),
+             "--cohort", "GSE58812", "--expression-matrix", str(results / "validation_GSE58812/GSE58812_normalized_gene_expression.tsv.gz"),
+             "--sample-metadata", str(results / "validation_GSE58812/GSE58812_clinical_IFI44L.tsv"),
+             "--signature-definitions", str(results / "bulk/immune_signature_definitions.tsv"),
+             "--source-scale", "log2(MAS5 intensity + 1)", "--output-dir", str(results / "external_checkpoint/GSE58812")], raw_root),
+            ("03d_GSE21653_checkpoint_context", [rscript, str(scripts / "28_external_checkpoint_partial.R"),
+             "--cohort", "GSE21653", "--expression-matrix", str(results / "validation_GSE21653/GSE21653_normalized_gene_expression.tsv.gz"),
+             "--sample-metadata", str(results / "validation_GSE21653/GSE21653_clinical_IFI44L.tsv"),
+             "--signature-definitions", str(results / "bulk/immune_signature_definitions.tsv"),
+             "--source-scale", "deposited RMA log2 intensity", "--output-dir", str(results / "external_checkpoint/GSE21653")], raw_root),
             ("04_wu_supplement", [str(python), str(scripts / "03_parse_wu2021_supplement.py"),
              "--project", str(project)], raw_root),
             ("04_gse176078_single_cell", [str(python), str(scripts / "04_single_cell_tnbc_analysis.py"),
@@ -110,18 +103,25 @@ def main() -> None:
             )
         for name, command, cwd in analysis_steps:
             run_step(name, command, cwd, log_dir, env)
-        if args.run_processing_sensitivity:
-            run_step("06_documented_processing_sensitivity", [
-                rscript, str(scripts / "22_documented_tcga_processing_sensitivity.R"),
-                "--work-dir", str(sensitivity_work),
-                "--output-dir", str(results / "processing_sensitivity"),
-            ], raw_root, log_dir, env)
+        run_step("05b_spatial_patient_robustness", [str(python), str(scripts / "27_spatial_patient_robustness.py"), "--project", str(project)], raw_root, log_dir, env)
+        # Rebuild strict eligibility from the same full source header and pinned
+        # clinical fields. Copy the small inputs for portability across systems.
+        strict = project / "sensitivity/strict_IHC"
+        for relative in ["TCGA_documented_primary", "TCGA_clinical", "TCGA_CDR"]:
+            shutil.copytree(source / relative, strict / "source_metadata" / relative, dirs_exist_ok=True)
+        for name, command in [
+            ("06a_strict_definition", [str(python), str(scripts / "21_audit_tcga_tnbc_definition.py"), "--project", str(strict), "--strict-ihc"]),
+            ("06b_strict_bulk", [rscript, str(scripts / "01_bulk_tnbc_reanalysis.R"), "--project", str(strict)]),
+            ("06c_strict_survival", [rscript, str(scripts / "06_tcga_tnbc_survival.R"), str(strict)]),
+        ]:
+            run_step(name, command, raw_root, log_dir, env)
 
     if args.stage in {"figures", "all", "public-analyses"}:
         for name, script in [
             ("11_figures_single_cell_spatial", "14_make_nature_style_figures.py"),
             ("12_figure_spatial_final", "16_make_spatial_main_figure.py"),
             ("13_figures_v11_public_multiomics", "15_make_bulk_validation_figures_v11.py"),
+            ("14_external_validation_figure", "26_make_external_validation_figure.py"),
         ]:
             run_step(name, [str(python), str(scripts / script), "--project", str(project)], raw_root, log_dir, env)
 

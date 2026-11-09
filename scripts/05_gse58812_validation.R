@@ -66,6 +66,8 @@ mapped <- expr_log2[match(probe_annotation$PROBEID, rownames(expr_log2)), , drop
 rownames(mapped) <- probe_annotation$SYMBOL
 gene_expr <- avereps(mapped, ID = rownames(mapped))
 if (!"IFI44L" %in% rownames(gene_expr)) stop("IFI44L mapping failed")
+fwrite(as.data.table(gene_expr, keep.rownames = "gene"),
+       file.path(result_dir, "GSE58812_normalized_gene_expression.tsv.gz"), sep = "\t", compress = "gzip")
 
 ifi <- as.numeric(gene_expr["IFI44L", clinical$sample_id])
 clinical[, `:=`(
@@ -124,13 +126,13 @@ fwrite(model_definitions, file.path(result_dir, "GSE58812_Cox_model_definitions.
 # Reuse the predeclared signatures, excluding IFI44L from every score to prevent
 # circular self-correlation.
 sig_def <- fread(file.path(project_dir, "results", "bulk", "immune_signature_definitions.tsv"))
-signature_list <- split(sig_def[present == TRUE & gene != "IFI44L", gene], sig_def[present == TRUE & gene != "IFI44L", signature])
+signature_list <- split(sig_def[gene != "IFI44L", gene], sig_def[gene != "IFI44L", signature])
 signature_list <- lapply(signature_list, intersect, y = rownames(gene_expr))
 signature_list <- signature_list[lengths(signature_list) >= 2]
 gse_signature_members <- copy(sig_def)
 gse_signature_members[, `:=`(
   present_in_GSE58812 = gene %in% rownames(gene_expr),
-  used_in_GSE58812 = gene != "IFI44L" & present == TRUE & gene %in% rownames(gene_expr)
+  used_in_GSE58812 = gene != "IFI44L" & gene %in% rownames(gene_expr)
 )]
 fwrite(gse_signature_members,
        file.path(result_dir, "GSE58812_immune_signature_definitions.tsv"), sep = "\t")

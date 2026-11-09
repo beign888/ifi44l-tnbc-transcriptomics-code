@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "code_version": "v1.3.0",
+  "code_commit": null,
+  "source_policy": "Current TCGA uses documented RSEM source only; complete source header determines eligibility; no undocumented fallback",
+  "supporting_files": {
+    "Additional_file_1": "Processed Source Data workbook, model definitions and figure source values",
+    "Additional_file_2": "Code snapshot matching final verified commit",
+    "Additional_file_3": "Documented TCGA main expression subset, complete1218 header, source/provenance metadata and pinned clinical receptor table",
+    "Additional_file_4": "GSE21653 exact all-probe87 subset, all266 metadata/header, selected list, annotation, design and source/provenance records",
+    "Additional_file_5": "Supplementary methods, supplementary figure, spatial/external-checkpoint robustness outputs and GSE58812 annotation audits"
+  },
+  "resources": [
+    {
+      "id": "TCGA_expression",
+      "source_url": "https://tcga.xenahubs.net/download/TCGA.BRCA.sampleMap/HiSeqV2.gz",
+      "source_version": "2017-10-13",
+      "units": "log2(RSEM normalized count + 1)",
+      "additional_transform": "none",
+      "full_source_sha256": "263bf67245cc4b9062676583c0ff0306f08471a26aafd5504037e1da22133746",
+      "full_source_bytes": 64286337,
+      "full_gene_rows": 20530,
+      "full_header_columns": 1218,
+      "staged_directory": "source_metadata/TCGA_documented_primary",
+      "staged_subset": "TCGA_BRCA_documented_primary_subset.tsv.gz",
+      "subset_sha256": "e268fa9d9da652c6f7418b408f663fbe60534e62ab98cd3791a51d593b402999",
+      "subset_bytes": 8632958,
+      "subset_columns": 157,
+      "full_header_file": "TCGA_HiSeqV2_full_sample_header.tsv",
+      "full_header_sha256": "2554effaed790acec265d15d2fd2b76647ff26923cc5b0d83945e5cc98493d2f",
+      "selection": "Type01; one lexicographically first primary sample perpatient; clinical ER/PR negative and resolved HER2 negative; positive HER2 evidence excluded; noPAM50",
+      "main_n": 157,
+      "strict_IHC_n": 113,
+      "supporting_file": 3
+    },
+    {
+      "id": "TCGA_receptors",
+      "source_url": "https://media.githubusercontent.com/media/cBioPortal/datahub/4c975725c54df7e31e0610fad22a742ad01cdfa3/public/brca_tcga/data_clinical_patient.txt",
+      "source_commit": "4c975725c54df7e31e0610fad22a742ad01cdfa3",
+      "sha256": "973b6e03436330e0563a15989d04fb3566a2c7cdc66db9aaa3badbb32c58badc",
+      "bytes": 1703839,
+      "staged_file": "source_metadata/TCGA_clinical/brca_tcga_clinical_patient.txt",
+      "supporting_file": 3,
+      "raw_GitHub_URL_returns_LFS_pointer": true
+    },
+    {
+      "id": "TCGA_CDR",
+      "source_url": "https://api.gdc.cancer.gov/data/1b5f413e-a8d1-4d10-92eb-7c4ae739ed81",
+      "staged_file": "source_metadata/TCGA_CDR/TCGA-CDR-SupplementalTableS1.xlsx",
+      "required_md5": "a4591b2dcee39591f59e5e25a6ce75fa",
+      "role": "OS/PFI endpoints",
+      "separate_official_download": true
+    },
+    {
+      "id": "GSE21653",
+      "source_url": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE21nnn/GSE21653/matrix/GSE21653_series_matrix.txt.gz",
+      "metadata_url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE21653&targ=gsm&view=brief&form=text",
+      "full_source_sha256": "f13e3bf972bd92a6fd53a1fbe42ad7c84caf4651df3a5e836f70dd3b22b5e76f",
+      "full_source_bytes": 22510462,
+      "full_probe_rows": 54613,
+      "source_sample_columns": 266,
+      "staged_directory": "source_metadata/GSE21653",
+      "staged_subset": "GSE21653_TNBC87_frozen_all_probes.tsv.gz",
+      "subset_sha256": "66cecd1e1fc29bccf1eec1cfa4631468441d04c1d812e1aa846cf4bcdf6c592a",
+      "subset_bytes": 7380481,
+      "selected_cases": 87,
+      "processing": "Deposited RMA with quantile normalization; no additional log",
+      "IFI44L_fixed_probe": "204439_at",
+      "IFI44L_entrez": "10964",
+      "symbol_mapping": "hgu133plus2.db3.13.0; AnnotationDbi; limma::avereps",
+      "clinical_selection": "er ihc=0,pr ihc=0,erbb2=0; source clinical calls,not PAM50",
+      "primary_DFS_n": 83,
+      "primary_DFS_events": 25,
+      "zero_time_sensitivity_n": 85,
+      "zero_time_sensitivity_events": 27,
+      "clinical_sensitivity_n": 81,
+      "clinical_sensitivity_events": 24,
+      "supporting_file": 4
+    },
+    {
+      "id": "GSE58812",
+      "source_url": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE58nnn/GSE58812/matrix/GSE58812_series_matrix.txt.gz",
+      "staged_file": "source_metadata/GSE58812/GSE58812_series_matrix.txt.gz",
+      "n": 107,
+      "processing": "MAS5 linear intensity; log2(pmax(x,0)+1),symbol mapping/avereps",
+      "separate_official_download": true,
+      "annotation_audit_supporting_file": 5
+    },
+    {
+      "id": "GSE176078_workbook",
+      "source_landing_page": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE176078",
+      "staged_file": "source_metadata/Wu2021_NatGenet_Supplementary_Tables.xlsx",
+      "separate_official_download": true
+    },
+    {
+      "id": "GSE176078_h5ad",
+      "source_landing_page": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE176078",
+      "Census_version": "2025-11-08",
+      "dataset_id": "9fddb063-056d-4202-8b8a-4b0ee531d3ce",
+      "source_acquisition_API": "cellxgene_census.download_source_h5ad(dataset_id,to_path,census_version=2025-11-08)",
+      "staged_file": "source_metadata/GSE176078_Wu2021_CELLxGENE_2025-11-08.h5ad",
+      "required_sha256": "04245d73cdcc0b473aa88ec655d1bcb051dbbd5f9a3d1aec4c2f37b1f0645df4",
+      "separate_official_download": true,
+      "raw_sequencing_reprocessing": false
+    },
+    {
+      "id": "GSE210616",
+      "source_url": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE210nnn/GSE210616/soft/GSE210616_family.soft.gz",
+      "staged_directory": "source_metadata/spatial/GSE210616",
+      "prepare_script": "scripts/08_prepare_gse210616_spatial.py",
+      "sections": 28,
+      "independent_patient_units": 14,
+      "downloaded_assets": "counts,positions,images,scalefactors; source URLs/checksums retained by preparation workflow",
+      "separate_official_download": true
+    }
+  ],
+  "data_licence": "Original source terms; MIT applies only to original code/documentation",
+  "fresh_full_runner_status": "NOT_YET_ESTABLISHED_FOR_PREPARED_RELEASE",
+  "immutable_commit_location": "Manuscript and separate remotely verified release receipt; own commit hash is not embedded in its content tree."
+}

@@ -221,7 +221,7 @@ def build_figure1(project: Path, output_dir: Path) -> dict[str, object]:
             ax_a.annotate(gene, (x, y), xytext=offset, textcoords="offset points", fontsize=6.6, color=BLACK, ha="center", va="center", arrowprops={"arrowstyle": "-", "lw": 0.35, "color": GREY, "shrinkA": 4, "shrinkB": 3})
     ax_a.axhline(-np.log10(0.05), color=GREY, lw=0.7, ls="--")
     ax_a.axvline(0, color=GREY, lw=0.6)
-    ax_a.set_xlabel("Expression coefficient per IFI44L s.d.\n(archived units)")
+    ax_a.set_xlabel("Expression coefficient per IFI44L s.d.\n[log2(RSEM normalized count + 1)]")
     ax_a.set_ylabel("-log10 FDR")
     ax_a.set_title("Continuous transcriptome associations", loc="left", fontweight="bold")
     panel_label(ax_a, "a", x=-0.19)
@@ -276,7 +276,7 @@ def build_figure1(project: Path, output_dir: Path) -> dict[str, object]:
     ax_d.scatter(checkpoints["adjusted_spearman_rho"], y, s=22, color=adjusted_colours, marker="s", label="Adjusted")
     ax_d.axvline(0, color=GREY, lw=0.7)
     ax_d.set_yticks(y, checkpoints["gene"])
-    ax_d.set_xlim(-0.30, 0.78)
+    ax_d.set_xlim(min(-0.30, float(checkpoints['adjusted_spearman_rho'].min()) - 0.08), max(0.78, float(checkpoints['raw_spearman_rho'].max()) + 0.05))
     ax_d.set_xlabel("Spearman rho")
     ax_d.set_title("Checkpoint associations after state adjustment", loc="left", fontweight="bold")
     ax_d.legend(loc="lower right")
@@ -372,7 +372,7 @@ def build_figure2(project: Path, output_dir: Path) -> dict[str, object]:
             ax_b.scatter(row["hr"], position + offset, s=23, color=colour, marker=marker, zorder=2)
     ax_b.axvline(1, color=GREY, lw=0.7, ls="--")
     ax_b.set_xscale("log")
-    ax_b.set_xlim(0.35, 1.60)
+    ax_b.set_xlim(min(0.35, float(forest['low'].min()) * 0.9), max(1.60, float(forest['high'].max()) * 1.1))
     ax_b.set_xticks([0.4, 0.6, 0.8, 1.0, 1.4], ["0.4", "0.6", "0.8", "1.0", "1.4"])
     ax_b.set_yticks(y_positions, label_order)
     ax_b.set_ylim(-0.95, 3.35)
@@ -446,8 +446,8 @@ def build_figure5(output_dir: Path) -> dict[str, object]:
     add_box(ax, (0.04, 0.57), 0.25, 0.27, "Bulk state", [
         "IFI44L tracks IFN and", "antigen-presentation programmes", "across receptor-defined", "TNBC tumours"
     ], BLUE, PALE_BLUE)
-    add_box(ax, (0.375, 0.57), 0.25, 0.27, "Cellular source", [
-        "highest transcript abundance", "in myeloid, endothelial", "and T-cell compartments;", "lower in malignant epithelium"
+    add_box(ax, (0.375, 0.57), 0.25, 0.27, "Cellular context", [
+        "higher normalized expression", "in myeloid, endothelial", "and T-cell compartments;", "lower in malignant epithelium"
     ], TEAL, PALE_TEAL)
     add_box(ax, (0.71, 0.57), 0.25, 0.27, "Spatial niches", [
         "focal IFI44L aggregation", "within multicellular IFN-", "and immune-enriched", "Visium neighbourhoods"
@@ -456,7 +456,7 @@ def build_figure5(output_dir: Path) -> dict[str, object]:
         "cohort-specific survival", "estimates are interpreted with", "event counts and available", "clinical covariates"
     ], BLUE, PALE_BLUE)
     add_box(ax, (0.55, 0.15), 0.27, 0.26, "Evidence boundary", [
-        "tissue-state marker, not", "a causal mechanism, independent", "prognostic biomarker or", "immunotherapy predictor"
+        "causal function and clinical", "prediction require independent", "validation beyond these", "observational associations"
     ], GREY, PALE_GREY)
 
     for start, end, colour in [

@@ -1,127 +1,95 @@
 # IFI44L in triple-negative breast cancer: reproducibility code
 
-Version: `v1.2.1` corrected clinical-cohort snapshot with a documented TCGA expression-processing sensitivity, prepared 9 November 2026.
+Version: `v1.3.0`, prepared 9 November 2026. The immutable commit is recorded in the manuscript and separate verified release receipt.
 
-Repository: <https://github.com/beign888/ifi44l-tnbc-transcriptomics-code>. A new public commit is not asserted here. Use the exact release commit recorded in the final release/package manifest and manuscript; verify the sealed file hashes in `FILE_MANIFEST_SHA256.tsv`. The previous v1.1.0 commit does not identify these corrected analyses.
+Repository: <https://github.com/beign888/ifi44l-tnbc-transcriptomics-code>. A complete local execution of the final all-stage runner passed on 9 November 2026. All 124 compared analysis TSVs matched the independently staged reference, and all 22 supplied scripts matched the frozen execution snapshot; 17 distinct scripts were invoked. Use the actual remotely verified commit identified by the manuscript/release receipt and verify FILE_MANIFEST_SHA256.tsv.
 
-This code covers TCGA-BRCA bulk transcriptomics and survival, independent GSE58812 bulk/survival analysis, GSE176078 single-cell RNA sequencing and GSE210616 Visium spatial transcriptomics. The corrected main TCGA cohort contains **151 unique patients**; a separate **110-patient strict HER2-IHC-negative sensitivity cohort** is supported. The new processing sensitivity uses the **same 151 patients** in a separately documented UCSC Xena expression representation. It is not an independent cohort. The historical 187-sample helper list is superseded and must not be described as a verified TNBC cohort.
+The primary TCGA analysis uses the documented UCSC Xena `TCGA.BRCA.sampleMap/HiSeqV2` matrix, version `2017-10-13`, distributed as `log2(RSEM normalized count + 1)`. Eligibility is reconstructed from its complete **1,218-column** header and pinned clinical metadata: **157 main patients** and **113 strict HER2-IHC-negative patients**. GSE58812 (107 patients) and the newly executed GSE21653 analysis (87 receptor-defined TNBC cases) provide separate bulk cohorts. GSE176078 and GSE210616 supply single-cell and multicellular spatial context.
 
-## Scientific and provenance boundaries
+## Scientific scope
 
-- Main eligibility requires explicit ER and PR negativity, negative HER2 IHC or FISH evidence, and no positive HER2 IHC/FISH or IHC 3+ result. Strict eligibility additionally requires explicit HER2 IHC negativity. PAM50 is not used for inclusion. Selection is generated before outcome modelling from a commit- and SHA-pinned public clinical table.
-- The exact 151-column archived TCGA-derived expression subset is supplied in two journal supporting-data archives, Additional files 3 and 4. Upstream expression release, units and original normalization cannot be recovered from the archived records. No TPM, FPKM, RSEM or log2-fold-change provenance is claimed. The preserved values are used without an additional transformation.
-- Additional file 5 supplies a separate all-gene, 151-column subset of UCSC Xena `TCGA.BRCA.sampleMap/HiSeqV2`, version `2017-10-13`, distributed as `log2(norm_count+1)` from RSEM normalized results. This input is used only to check module correlations under documented expression processing; it does not identify the original archived matrix's source or replace the main analyses. No new GSEA, survival or adjusted checkpoint analysis is run in this sensitivity.
-- IFI44L is excluded from the response-gene family **before** limma fitting, empirical-Bayes moderation and BH adjustment, and from the ranked enrichment list and all correlated signatures.
-- In TCGA, primary checkpoint adjustment ranks all variables before OLS residualization, correlates rank residuals using Pearson correlation, and uses an approximate two-sided t reference with `n-k-2` degrees of freedom. Each adjustment signature excludes IFI44L and the checkpoint currently tested (leave-one-target-out). Shared-module rank adjustment and the historical raw-scale residual/Spearman calculation are separate TCGA sensitivity outputs. GSE58812 checkpoint analyses are unadjusted Spearman correlations with BH correction; no partial-correlation or leave-one-target-out checkpoint adjustment was performed in that cohort.
-- Expression-module scores are not measured cell fractions or tumour purity. Dissociated single-cell expression/detection does not quantify each compartment's contribution to bulk expression. Visium spots represent multicellular niches.
-- The inferential unit is the tumour, patient or donor. Continuous standardized IFI44L is the primary survival predictor; median groups are graphical sensitivities. TCGA results are retained regardless of significance, without claiming independent prognostic or treatment-predictive utility.
+- TCGA eligibility requires type-01 primary tumour, explicit ER/PR IHC negativity, negative HER2 IHC or FISH evidence and no positive HER2 IHC/FISH or IHC 3+ result. Strict sensitivity adds explicit HER2-IHC negativity. One primary barcode per patient is chosen lexicographically before expression/outcome analysis. PAM50 does not determine inclusion.
+- The complete documented source contains 20,530 gene rows. Additional file 3 supplies the exact all-gene 157-column subset, the complete source header, source metadata/provenance and pinned receptor table. The complete source or that SHA-verified subset can reproduce the analysis. No undocumented expression fallback is accepted and no additional log transform is applied.
+- IFI44L is removed before response-gene limma fitting/moderation/BH, from the ranked enrichment list and from every correlated module. GO results retain the complete eligible-family denominator and explicitly identify unresolved tests.
+- TCGA checkpoint adjustment ranks all variables, regresses out four target-excluded module scores and correlates rank residuals, with an approximate two-sided t reference. Every adjustment module excludes IFI44L and the checkpoint being tested. Nine-gene external checkpoint extensions in GSE58812/GSE21653 are **TCGA-result-driven exploratory analyses**, not independently prespecified discoveries.
+- GSE21653 retains historical clinical receptor calls, with no RNA-subtype substitute. Its deposited RMA values are used directly. Primary DFS models require positive time (83 patients/25 events); two recorded zero-time events remain unchanged in a named sensitivity (85/27). The age/pT/pN/grade sensitivity has 81 complete cases/24 events and five coefficients, so it cannot establish independent prognostic performance.
+- Expression modules are not measured cell fractions or purity. Dissociated-cell means do not quantify contributions to bulk RNA. Visium spots represent multicellular niches. Spatial leave-one-patient-out and bootstrap checks use the patient as the independent unit.
+- Cohort-specific associations, null findings and uncertainty are retained. Numerical reproducibility does not establish causal regulation, treatment prediction or clinical utility.
 
-The repository contains no local patient/IHC material, cell-line measurements, immunoblots or manuscript source. Public TCGA-derived supporting inputs are distinct from a locally collected clinical cohort. Original dataset terms continue to apply.
+No locally collected patient/IHC material, cell-line data, immunoblots or manuscript source is included. Dataset-specific terms remain separate from the code licence.
 
-## Layout and environment
+## Layout and installation
 
 ```text
-scripts/                    restoration, analysis, figure and validation code
-environment/                recorded Python/R versions and installation instructions
-PUBLIC_DATA_ACCESS.md       sources, hashes, staging and provenance limitations
-SOURCE_DATA_MAP.tsv         figure/input-to-source-to-script map
-VALIDATION_REPORT.md        completed checks and remaining validation boundaries
-FILE_MANIFEST_SHA256.tsv    file integrity manifest, regenerated when sealed
-LICENSE                     MIT terms for original code/documentation
-LICENSE_STATUS.md           third-party exclusions
+scripts/                         input preparation, analysis, figures and preflight
+environment/                     recorded software versions and input manifest
+PUBLIC_DATA_ACCESS.md             exact sources, hashes and staging
+SOURCE_DATA_MAP.tsv               figure/input-to-code map
+VALIDATION_REPORT.md              executed checks and remaining release boundary
+LICENSE / LICENSE_STATUS.md       MIT code terms and third-party exclusions
 ```
 
-Runtime directories `source_metadata/`, `results/`, `figures/` and `logs/` are excluded from version control. Follow the recorded versions in `environment/`; the audit replay used Python 3.12.13 and preserved packages. A clean installation on every operating system has not been established.
+Runtime `source_metadata/`, `results/`, `sensitivity/`, `figures/` and `logs/` directories are not bundled as code. Follow `environment/README.md`; package lists record actual versions and are not a tested universal lockfile.
 
-```bash
+```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
 python -m pip install -r environment/python-requirements.txt
 Rscript environment/install_R_packages.R
 ```
 
-## Restore and stage inputs
+## Stage inputs
 
-Obtain both `Additional_file_3_TCGA_Frozen_Input_Part1.zip` and `Additional_file_4_TCGA_Frozen_Input_Part2.zip` from the manuscript's supporting files. From the repository root:
+Extract Additional file 3 and Additional file 4 into `source_metadata/`. The former must create `TCGA_documented_primary/` and `TCGA_clinical/`; the latter must create `GSE21653/`. Archive filenames can differ, so use their actual local paths:
 
-```bash
+```sh
 mkdir -p source_metadata
-unzip -n /path/to/Additional_file_3_TCGA_Frozen_Input_Part1.zip -d source_metadata
-unzip -n /path/to/Additional_file_4_TCGA_Frozen_Input_Part2.zip -d source_metadata
-python scripts/00_restore_frozen_tcga_input.py --project "$PWD"
+unzip -n /path/to/Additional_file_3.zip -d source_metadata
+unzip -n /path/to/Additional_file_4.zip -d source_metadata
 ```
 
-The script concatenates `.part01` and `.part02` in that order and checks SHA-256. The restored gzip is 27,173,060 bytes. Both parts are required; neither is independently readable as a gzip. Part 1 also supplies the pinned clinical table, original 1,072-sample header and provenance receipt.
+Additional file 5 supplies supplementary methods, Supplementary Figure S1, robustness outputs and annotation audits; it is not a replacement for the analysis inputs. Obtain the remaining official TCGA-CDR, GSE58812, GSE176078/Wu workbook/h5ad and GSE210616 inputs as described in `PUBLIC_DATA_ACCESS.md`.
 
 ```text
 source_metadata/
-├── TCGA_frozen/
-│   ├── TCGA_BRCA_TNBC_frozen.tsv.gz.part01
-│   ├── TCGA_BRCA_TNBC_frozen.tsv.gz.part02
-│   ├── TCGA_BRCA_TNBC_frozen.tsv.gz
-│   ├── TCGA_BRCA_expression_header_samples.tsv
-│   └── TCGA_frozen_input_provenance.json
+├── TCGA_documented_primary/
+│   ├── TCGA_BRCA_documented_primary_subset.tsv.gz
+│   ├── TCGA_HiSeqV2_full_sample_header.tsv
+│   ├── HiSeqV2.json
+│   ├── REACQUISITION_RECEIPT.json
+│   └── TCGA_documented_input_provenance.json
 ├── TCGA_clinical/brca_tcga_clinical_patient.txt
 ├── TCGA_CDR/TCGA-CDR-SupplementalTableS1.xlsx
+├── GSE21653/...
 ├── GSE58812/GSE58812_series_matrix.txt.gz
 ├── Wu2021_NatGenet_Supplementary_Tables.xlsx
 ├── GSE176078_Wu2021_CELLxGENE_2025-11-08.h5ad
-└── spatial/GSE210616/
-    ├── GSE210616_family.soft.gz
-    ├── GSE210616_primary28_samples.tsv
-    └── files/GSM*/...
+└── spatial/GSE210616/...
 ```
 
-Stage other public files as described in `PUBLIC_DATA_ACCESS.md`. Historical receptor workbooks and `三阴.txt` are not required by the corrected default workflow. If the original `symbol.BRCA.txt` is supplied under a separate `--raw-root`, the scripts prefer it over the restored subset; verify its recorded hash rather than silently substituting another matrix.
+## Execute
 
-For the processing sensitivity, extract Additional file 5 and copy the contents of its `TCGA_processing_sensitivity/` directory into `source_metadata/TCGA_documented_processing/`. That directory must contain `documented_HiSeqV2_matched151_expression.tsv.gz`, the four `baseline_*` inputs and `PROCESSING_SENSITIVITY_DESIGN.json`. The supplied subset is 8,251,822 bytes (SHA-256 `53d57d8013a86933143964d7ffd68d4247f1bf8737c0c2ce5238e97c2a9a85f8`) and preserves all 20,530 source gene rows and the frozen 151-sample order. The complete 64,286,337-byte Xena source is optional for this replay. See `PUBLIC_DATA_ACCESS.md` for its identity and the subset-preparation helper.
-
-```bash
-python scripts/08_prepare_gse210616_spatial.py \
-  --soft source_metadata/spatial/GSE210616/GSE210616_family.soft.gz \
-  --output-dir source_metadata/spatial/GSE210616 --download
+```sh
 python scripts/17_reproducibility_preflight.py \
   --project "$PWD" --raw-root "$PWD" --deep-hash
-```
-
-## Reproduction commands
-
-Run the main 151-patient workflow after staging every required input:
-
-```bash
 python scripts/18_run_nonexperimental_pipeline.py \
-  --project "$PWD" --raw-root "$PWD" --stage all --permutations 499 \
-  --run-processing-sensitivity
+  --project "$PWD" --raw-root "$PWD" --stage all --permutations 499
 ```
 
-This rebuilds clinical selection, bulk/survival, single-cell and spatial results and Figures 1–5, then runs the separately staged processing sensitivity. It stops at a failed step and records logs in `logs/reproduction/`. Omit `--run-processing-sensitivity` to run the original core workflow without Additional file 5. The flag is available with `--stage all` or `--stage public-analyses`. Add `--run-census-audit` only when access to the pinned Census version is available; this optional metadata query does not regenerate raw sequencing or the processed h5ad.
+The complete runner rebuilds main TCGA eligibility/bulk/survival and exploratory categorical-stage/stage-stratified sensitivities, both external bulk cohorts, exploratory external checkpoint checks, single-cell/spatial results, patient-level spatial robustness, a separate strict-IHC TCGA analysis and the main/supplementary figures. It stops on failed steps and records logs. Strict outputs are isolated under `sensitivity/strict_IHC`; they do not replace the main cohort. `--run-census-audit` additionally queries the pinned Census metadata and does not regenerate the h5ad from raw sequencing.
 
-The processing sensitivity can also be run on its own, without rerunning the core analyses:
+To run only the new GSE21653 analysis after staging its supplied inputs:
 
-```bash
-Rscript scripts/22_documented_tcga_processing_sensitivity.R \
-  --work-dir source_metadata/TCGA_documented_processing \
-  --output-dir results/processing_sensitivity
+```sh
+Rscript scripts/25_gse21653_validation.R --project "$PWD"
 ```
 
-Its default input is the supplied small subset. Use `--input` to select the complete documented source matrix instead. The supplied baseline files permit a standalone comparison; `--baseline-project "$PWD"` optionally reads them from `results/bulk`. The script uses the original 13 module definitions with IFI44L excluded. TRAC is absent in this legacy annotation, so the CD8 T-cell module has 7/8 members; the IFN-alpha-response module retains 19/19. Scores use the original ssGSEA settings and correlations use two-sided Spearman tests with BH correction across all 13 modules.
+`scripts/27_prepare_gse21653_inputs.py --project "$PWD" --download` can reacquire the exact full GSE21653 matrix/metadata and reconstruct the subset. `scripts/24_prepare_documented_tcga_input.py` reconstructs the documented TCGA input bundle from the exact complete source and its acquisition/clinical metadata; see `PUBLIC_DATA_ACCESS.md` for its required arguments.
 
-For the 110-patient strict-IHC sensitivity, use a **separate copy of the code project with staged inputs**, then run:
+## Validation and attribution
 
-```bash
-python scripts/21_audit_tcga_tnbc_definition.py \
-  --project "$PWD" --raw-root "$PWD" --strict-ihc
-Rscript scripts/01_bulk_tnbc_reanalysis.R --project "$PWD" --raw-root "$PWD"
-Rscript scripts/06_tcga_tnbc_survival.R "$PWD"
-```
+New isolated TCGA main/strict models and the complete-source/subset GSE21653 executions have bounded retained checks. GSE21653 module statistics and all four Cox-model coefficients were independently recalculated; 16 result TSVs and its complete normalized gene matrix matched between input routes. External checkpoint checks have a separate exploratory audit. The complete final runner was subsequently executed successfully, including the added stage sensitivity and all figures. The independent final replay matched all 124 analysis TSVs and all frozen analysis scripts. See VALIDATION_REPORT.md for its local-environment and shared-input boundaries.
 
-Do not run `--stage all` after strict selection in the same results directory: its default selection restores the main cohort. Keep main and sensitivity results separate.
+Author attribution and contributions remain deferred. The hosting account is not evidence of manuscript authorship. Original code/documentation uses MIT; third-party inputs, publications, images and dependencies retain their own terms. The final manuscript and package must pin the same externally verified immutable commit. This tree intentionally does not embed its own content-derived commit hash.
 
-## Validation and citation
-
-The core numerical evidence is inherited from the bounded v1.2.0 checks: corrected main/strict bulk snapshots, GSE58812, 19 single-cell/spatial tables, and comparison of the corrected-cohort Python Kaplan–Meier helper against R survival, log-log confidence intervals and risk sets. A separate frozen-input route restored the exact eligible sample set without the original matrix or helper list; raw expression, core limma results and the survival script outputs matched the original-input route. This frozen-route check did not rerun GSEA. Subsequent label/diagnostic-only bulk edits were checked separately; they are not a second full end-to-end replay. Some enrichment tests remain explicitly unresolved.
-
-The new documented-processing sensitivity was separately executed against the complete source and the supplied subset: both exited zero, ten result TSVs matched byte for byte, and an independent SciPy recalculation verified all 13 correlations and BH values. Source-string comparison checked 3,100,030 values. This is a bounded processing check on overlapping patients, not a fresh end-to-end execution of v1.2.1 or independent biological validation. Core analysis algorithms and results from scripts 01–21 are unchanged; the runner adds an optional call to script 22, while script 23 reconstructs its documented subset when needed. See `VALIDATION_REPORT.md` for the exact execution and release-check boundaries.
-
-Citation metadata, author attribution and contributions remain deferred. The GitHub hosting account is not evidence of manuscript authorship. Original code/documentation uses MIT; third-party data, publications, images and dependencies retain their own terms (`LICENSE_STATUS.md`).
+The TCGA stage sensitivities use 152 complete cases. The categorical-stage OS term violated PH, motivating stage-stratified analyses for both endpoints; all specifications are retained and do not replace the primary continuous models. See scripts/29_tcga_stage_sensitivity.R and complete source tables.

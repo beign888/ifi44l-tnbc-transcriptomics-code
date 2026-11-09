@@ -13,3 +13,6 @@ GEOquery	2.70.0	Bioconductor 3.18
 Biobase	2.62.0	Bioconductor 3.18
 AnnotationDbi	1.64.1	Bioconductor 3.18
 hgu133plus2.db	3.13.0	Bioconductor annotation package
+digest	0.6.37	CRAN
+jsonlite	1.9.1	CRAN
+statmod	1.5.0	CRAN; required by robust limma moderation
