@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "code_version": "v1.3.0",
+  "code_version": "v1.4.0",
   "code_commit": null,
-  "recorded_utc": "2026-11-09T04:57:40.460429+00:00",
+  "recorded_utc": "2026-11-09T08:24:43.315912+00:00",
   "environment_kind": "Recorded package manifests and bounded execution records,not universal lockfile or fresh cross-platform installation proof",
   "declared_python_requirements": [
     {
@@ -164,12 +164,34 @@
   "bounded_completed_checks": {
     "TCGA_isolated_rebuild": "135/135 source/model consistency checks",
     "GSE21653": "full/subset exit0;16resultTSVs and complete gene matrix byte-identical;SciPy13cor/BH;PHReg all4models/allcoefficients",
-    "external_checkpoints": "152/152;TCGA-result-driven exploratory"
+    "external_checkpoints": "152/152;TCGA-result-driven exploratory",
+    "conditional_three_cohort_v16": "421/421;independent PHReg29models;fixed Spearman/BH;ssGSEA and Schoenfeld not independently reimplemented",
+    "within_lineage_single_cell_v16": "38/38;source aggregates and independent dynamic-programming exact donor-label permutation audit;existing cohort",
+    "GSE96058_source": "complete591676211B;30865gene IDs/4413695selected decimal strings exact;full/subset20analysisTSVs and gene gzip byte-identical",
+    "GSE96058_models": "302/302 independent source-metadata/SciPy/PHReg;9Cox/3LRT BH3;PH coverage only,not independent Schoenfeld algorithm",
+    "GSE96058_figure_S4": "181 source/font/plot checks and actual original-size visual review",
+    "v16_exact_extension_replay": "6jobs exit0;29scripts/8protocols exact;58analysis/plotTSVs byte-identical;3path/manifests excluded;offline exactgzip restored"
   },
-  "complete_v1_3_0_runner_status": "NOT_YET_ESTABLISHED",
+  "complete_v1_3_0_runner_status": "HISTORICAL_PASS124analysisTSVs;22scripts exact;17invoked;existing macOS/shared verified inputs",
   "clean_installation_tested": false,
   "all_operating_systems_tested": false,
-  "final_code_overlay_and_repository_hash_manifest": "Root release process must seal final candidates and regenerate manifest after actual complete runner and final preflight",
+  "final_code_overlay_and_repository_hash_manifest": "29scripts/8protocols byte-matched to completed extension replay; final content manifest and immutable remote identity recorded by external release process",
   "immutable_commit_location": "Manuscript and separate remotely verified release receipt; own commit hash is not embedded in its content tree.",
-  "final_local_full_pipeline_execution": "PASS;124 analysis TSVs;22 script hashes;17 distinct scripts invoked;shared verified inputs;existing macOS runtime"
+  "final_local_full_pipeline_execution": "PASS;124 analysis TSVs;22 script hashes;17 distinct scripts invoked;shared verified inputs;existing macOS runtime",
+  "observed_GSE96058_independent_numeric_runtime": {
+    "python": "3.12.14",
+    "numpy": "2.5.2",
+    "pandas": "2.3.3",
+    "scipy": "1.18.1",
+    "statsmodels": "0.15.0"
+  },
+  "observed_GSE96058_R_runtime": "R4.3.2;GSVA1.50.5;survival3.8-3;see GSE96058_R_sessionInfo.txt",
+  "v16_execution_scope": {
+    "existing_macOS_runtime": true,
+    "shared_immutable_core_prerequisites": true,
+    "fresh_install": false,
+    "full_core_rerun": false,
+    "cross_OS": false,
+    "new_biological_validation_established_by_software_checks": false
+  }
 }

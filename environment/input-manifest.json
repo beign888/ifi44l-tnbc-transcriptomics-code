@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "code_version": "v1.3.0",
+  "code_version": "v1.4.0",
   "code_commit": null,
   "source_policy": "Current TCGA uses documented RSEM source only; complete source header determines eligibility; no undocumented fallback",
   "supporting_files": {
@@ -8,7 +8,10 @@
     "Additional_file_2": "Code snapshot matching final verified commit",
     "Additional_file_3": "Documented TCGA main expression subset, complete1218 header, source/provenance metadata and pinned clinical receptor table",
     "Additional_file_4": "GSE21653 exact all-probe87 subset, all266 metadata/header, selected list, annotation, design and source/provenance records",
-    "Additional_file_5": "Supplementary methods, supplementary figure, spatial/external-checkpoint robustness outputs and GSE58812 annotation audits"
+    "Additional_file_5": "Supplementary methods, supplementary figure, spatial/external-checkpoint robustness outputs and GSE58812 annotation audits",
+    "Additional_file_6": "v16 supplementary methods, Figures S2-S4 and complete conditional/single-cell/SCAN-B result and plotting-source tables",
+    "Additional_file_7": "GSE96058 full metadata/provenance/header/linkage plus binary part01 of exact all-gene143 subset",
+    "Additional_file_8": "GSE96058 binary part02; jointly restore original exact gzip with Additional file7"
   },
   "resources": [
     {
@@ -112,9 +115,77 @@
       "independent_patient_units": 14,
       "downloaded_assets": "counts,positions,images,scalefactors; source URLs/checksums retained by preparation workflow",
       "separate_official_download": true
+    },
+    {
+      "id": "GSE96058",
+      "source_url": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE96nnn/GSE96058/suppl/GSE96058_gene_expression_3273_samples_and_136_replicates_transformed.csv.gz",
+      "metadata_urls": [
+        "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE96nnn/GSE96058/matrix/GSE96058-GPL11154_series_matrix.txt.gz",
+        "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE96nnn/GSE96058/matrix/GSE96058-GPL18573_series_matrix.txt.gz"
+      ],
+      "full_source_sha256": "3c717baf7960e1f1477a72744a399a42fabba113c9e7ecb3d55997574d7e9732",
+      "full_source_bytes": 591676211,
+      "full_gene_rows": 30865,
+      "source_sample_columns": 3409,
+      "source_primary_records": 3273,
+      "excluded_technical_replicates": 136,
+      "staged_directory": "source_metadata/GSE96058",
+      "staged_subset": "GSE96058_TNBC143_frozen_all_genes.tsv.gz",
+      "subset_sha256": "2e49a251c2f9129658a2924e78372ebaf4fb936466e1553d7a7e1e6410e5b5ba",
+      "subset_bytes": 25592924,
+      "selected_cases": 143,
+      "processing": "log2(FPKM+0.1), source transcript FPKM summed by gene symbol; no further transform",
+      "clinical_selection": "clinical er status=pgr status=her2 status=0; no MGC/SGC/PAM50 replacement; source diagnostic binary calls, no retrospectively imposed modern cutoff",
+      "OS_n": 143,
+      "OS_events": 26,
+      "clinical_complete_n": 137,
+      "clinical_complete_events": 26,
+      "platform_case_events": {
+        "HiSeq2000": {
+          "n": 126,
+          "events": 25
+        },
+        "NextSeq500": {
+          "n": 17,
+          "events": 1
+        }
+      },
+      "exact_source_decimal_strings_checked": 4413695,
+      "full_subset_analysis_TSVs_byte_identical": 20,
+      "parts": [
+        {
+          "order": 1,
+          "file": "GSE96058_TNBC143_frozen_all_genes.tsv.gz.part01",
+          "bytes": 16777216,
+          "sha256": "48b6efe979214168ae82d3de62c1ee3ebb763a5086b55adca3ff04e0cff2c6a0"
+        },
+        {
+          "order": 2,
+          "file": "GSE96058_TNBC143_frozen_all_genes.tsv.gz.part02",
+          "bytes": 8815708,
+          "sha256": "0f352779992468d7a5b359451f6310473cf714faf9bdc7e057617e1b1988418c"
+        }
+      ],
+      "restore_command": "python scripts/34_prepare_GSE96058_inputs.py --project \"$PWD\" --restore-parts",
+      "offline_restoration_verified": true,
+      "supporting_files": [
+        7,
+        8
+      ],
+      "analysis_plan_sha256": "f174e513f1c3091a19d0ab3233512048c64e0b02f564a46101fd324ab550a7ae",
+      "platform_amendment_sha256": "06b06ed2d8879e2b1aecc2df094eca9baabcd317c1686d55c0801d2029f8db22",
+      "clinical_model_limit": "26events for5-6coefficients;no independent prognostic utility claim"
     }
   ],
   "data_licence": "Original source terms; MIT applies only to original code/documentation",
-  "fresh_full_runner_status": "NOT_YET_ESTABLISHED_FOR_PREPARED_RELEASE",
-  "immutable_commit_location": "Manuscript and separate remotely verified release receipt; own commit hash is not embedded in its content tree."
+  "immutable_commit_location": "Manuscript and separate remotely verified release receipt; own commit hash is not embedded in its content tree.",
+  "execution_scope": {
+    "historical_v15_core": "PASS124compared analysisTSVs;22scripts matched;17invoked; existing macOS/shared verified inputs",
+    "v16_extension_replay": "PASS6jobs exit0;29scripts and8protocols exact;58analysis/plotTSVs byte-identical;3path/manifests excluded",
+    "full_core_rerun_in_v16": false,
+    "clean_installation_tested": false,
+    "cross_platform_tested": false,
+    "independent_biological_replication_established_by_replay": false
+  },
+  "metadata_supporting_file_count": 8
 }
